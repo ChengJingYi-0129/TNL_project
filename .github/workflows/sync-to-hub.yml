@@ -17,9 +17,10 @@ jobs:
           lfs: true
 
       - name: Push to Hugging Face
-        uses: nateraw/huggingface-sync-action@v0.0.5
-        with:
-          github_repo_id: 'ChengJingYi-0129/TNL_project'
-          huggingface_repo_id: 'CJY0129/cinema-sentiment-analysis'
-          repo_type: 'space'
-          hf_token: ${{ secrets.HF_TOKEN }}
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add hf "https://user:${HF_TOKEN}@huggingface.co/spaces/CJY0129/cinema-sentiment-analysis"
+          git push hf HEAD:main --force
