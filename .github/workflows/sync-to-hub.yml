@@ -1,0 +1,25 @@
+name: Sync to Hugging Face Hub
+
+on:
+  push:
+    branches: [main]
+
+  workflow_dispatch:
+
+jobs:
+  sync-to-hub:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Push to Hugging Face
+        uses: nateraw/huggingface-sync-action@v0.0.5
+        with:
+          github_repo_id: 'ChengJingYi-0129/TNL_project.git'
+          huggingface_repo_id: 'CJY0129/cinema-sentiment-analysis'
+          repo_type: 'space'
+          hf_token: ${{ secrets.HF_TOKEN }}
