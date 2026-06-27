@@ -19,7 +19,7 @@ jobs:
       - name: Push to Hugging Face
         uses: nateraw/huggingface-sync-action@v0.0.5
         with:
-          github_repo_id: 'ChengJingYi-0129/TNL_project.git'
+          github_repo_id: 'ChengJingYi-0129/TNL_project'
           huggingface_repo_id: 'CJY0129/cinema-sentiment-analysis'
           repo_type: 'space'
           hf_token: ${{ secrets.HF_TOKEN }}
