@@ -1,5 +1,4 @@
 gradio
 torch
 numpy
-tensorflow
 scikit-learn

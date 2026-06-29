@@ -32,7 +32,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git lfs install --local
-          git lfs track "*.pt" "*.pth" "*.bin" "*.safetensors" "*.keras" "*.h5" "glove*.txt" "model training/data/glove*.txt"
+          git lfs track "*.pt" "*.pth" "*.bin" "*.safetensors" "*.keras" "*.h5" "*.pkl" "glove*.txt" "model training/data/glove*.txt" "[0-9]" "best_sentiment_bigru/data/*"
           git add .gitattributes
           git add .
           git commit -m "Sync Space files"
