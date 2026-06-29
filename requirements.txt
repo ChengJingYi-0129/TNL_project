@@ -1,5 +1,6 @@
 gradio
 torch
 numpy
-tensorflow
 scikit-learn
+plotly
+pandas
