@@ -3,15 +3,33 @@ import torch
 import torch.nn as nn
 import pickle
 import numpy as np
+import os
+import gdown
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
+# ============ DOWNLOAD MODEL FROM GOOGLE DRIVE ============
+FILE_ID = "1o8gi7-Ija3bT8mIfidaU0oVN5eOPt9ap"
+MODEL_PATH = "model_weights.pt"
+
+if not os.path.exists(MODEL_PATH):
+    print("Downloading model from Google Drive...")
+    url = f"https://drive.google.com/uc?id={FILE_ID}"
+    gdown.download(url, MODEL_PATH, quiet=False)
+    print("Download complete!")
+else:
+    print("Model file already exists.")
+
 # ============ LOAD TOKENIZER ============
+print("Loading tokenizer...")
 with open('tokenizer.pkl', 'rb') as f:
     tokenizer = pickle.load(f)
+print("Tokenizer loaded!")
 
 # ============ LOAD LABEL ENCODER ============
+print("Loading label encoder...")
 with open('label_encoder.pkl', 'rb') as f:
     label_encoder = pickle.load(f)
+print("Label encoder loaded!")
 
 # ============ MODEL PARAMETERS ============
 MAX_LEN = 150
@@ -57,10 +75,12 @@ class SentimentBiGRU(nn.Module):
 
 # ============ LOAD MODEL ============
 device = torch.device("cpu")
+print("Loading model weights...")
 model = SentimentBiGRU()
-model.load_state_dict(torch.load('model_weights.pt', map_location=device))
+model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
 model.to(device)
 model.eval()
+print("Model loaded successfully!")
 
 # ============ PREDICTION FUNCTION ============
 def predict_sentiment(review_text):
@@ -69,11 +89,11 @@ def predict_sentiment(review_text):
         sequences = tokenizer.texts_to_sequences([review_text])
         padded = pad_sequences(sequences, maxlen=MAX_LEN, padding='post', truncating='post')
         text_tensor = torch.tensor(padded, dtype=torch.long).to(device)
-        
-        # Metadata (zeros)
+
+        # Metadata (zeros since we don't have location/rating)
         metadata = np.zeros((1, metadata_size), dtype=np.float32)
         metadata_tensor = torch.tensor(metadata, dtype=torch.float32).to(device)
-        
+
         # Predict
         with torch.no_grad():
             outputs = model(text_tensor, metadata_tensor)
@@ -81,12 +101,12 @@ def predict_sentiment(review_text):
             class_idx = np.argmax(probs)
             sentiment = label_encoder.classes_[class_idx]
             confidence = probs[class_idx] * 100
-        
-        # Build result
+
         pos_prob = probs[0] * 100
         neu_prob = probs[1] * 100
         neg_prob = probs[2] * 100
-        
+
+        # Build result
         result = f"""
 ==================================================
 ANALYSIS RESULTS
@@ -107,6 +127,7 @@ Word Count: {len(review_text.split())}
 ==================================================
 """
         return result
+
     except Exception as e:
         return f"Error: {str(e)}"
 
