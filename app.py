@@ -7,7 +7,7 @@ import os
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 # ============ LOAD SPLIT MODEL FILES ============
-MODEL_FOLDER = "best_sentiment_bigru"  # The folder containing data.pkl
+MODEL_FOLDER = "best_sentiment_bigru"
 
 def persistent_load(saved_id):
     if isinstance(saved_id, tuple) and len(saved_id) >= 5:
@@ -34,10 +34,11 @@ with open(os.path.join(MODEL_FOLDER, 'data.pkl'), 'rb') as f:
     state_dict = unpickler.load()
 print(f"Loaded state dict with {len(state_dict)} layers")
 
-# ============ LOAD TOKENIZER & LABEL ENCODER ============
+# ============ LOAD TOKENIZER ============
 with open('tokenizer.pkl', 'rb') as f:
     tokenizer = pickle.load(f)
 
+# ============ LOAD LABEL ENCODER ============
 with open('label_encoder.pkl', 'rb') as f:
     label_encoder = pickle.load(f)
 
@@ -95,13 +96,16 @@ print("Model loaded successfully!")
 # ============ PREDICTION FUNCTION ============
 def predict_sentiment(review_text):
     try:
+        # Tokenize
         sequences = tokenizer.texts_to_sequences([review_text])
         padded = pad_sequences(sequences, maxlen=MAX_LEN, padding='post', truncating='post')
         text_tensor = torch.tensor(padded, dtype=torch.long).to(device)
 
+        # Metadata (zeros)
         metadata = np.zeros((1, metadata_size), dtype=np.float32)
         metadata_tensor = torch.tensor(metadata, dtype=torch.float32).to(device)
 
+        # Predict
         with torch.no_grad():
             outputs = model(text_tensor, metadata_tensor)
             probs = outputs.cpu().numpy()[0]
@@ -113,6 +117,7 @@ def predict_sentiment(review_text):
         neu_prob = probs[1] * 100
         neg_prob = probs[2] * 100
 
+        # Build result
         result = f"""
 ==================================================
 ANALYSIS RESULTS
