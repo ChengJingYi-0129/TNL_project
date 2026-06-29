@@ -1,0 +1,10 @@
+.venv/
+.venv-win/
+__pycache__/
+*.pyc
+
+# Local training data and outputs
+glove.6B.100d.txt
+model training/data/glove.6B.100d.txt
+model training/torch_outputs/
+model training/__pycache__/
