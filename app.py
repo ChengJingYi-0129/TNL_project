@@ -4,32 +4,42 @@ import torch.nn as nn
 import pickle
 import numpy as np
 import os
-import gdown
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
-# ============ DOWNLOAD MODEL FROM GOOGLE DRIVE ============
-FILE_ID = "1o8gi7-Ija3bT8mIfidaU0oVN5eOPt9ap"
-MODEL_PATH = "model_weights.pt"
+# ============ LOAD SPLIT MODEL FILES ============
+MODEL_FOLDER = "best_sentiment_bigru"  # The folder containing data.pkl
 
-if not os.path.exists(MODEL_PATH):
-    print("Downloading model from Google Drive...")
-    url = f"https://drive.google.com/uc?id={FILE_ID}"
-    gdown.download(url, MODEL_PATH, quiet=False)
-    print("Download complete!")
-else:
-    print("Model file already exists.")
+def persistent_load(saved_id):
+    if isinstance(saved_id, tuple) and len(saved_id) >= 5:
+        storage_type = saved_id[0]
+        storage_class = saved_id[1]
+        key = saved_id[2]
+        location = saved_id[3]
+        size = saved_id[4]
+        
+        data_path = os.path.join(MODEL_FOLDER, 'data', str(key))
+        if os.path.exists(data_path):
+            with open(data_path, 'rb') as f:
+                raw_data = f.read()
+            
+            array = np.frombuffer(raw_data, dtype=np.float32)
+            storage = torch.FloatStorage.from_buffer(array.tobytes(), 'little')
+            return storage
+    return None
 
-# ============ LOAD TOKENIZER ============
-print("Loading tokenizer...")
+print("Loading model from split files...")
+with open(os.path.join(MODEL_FOLDER, 'data.pkl'), 'rb') as f:
+    unpickler = pickle.Unpickler(f)
+    unpickler.persistent_load = persistent_load
+    state_dict = unpickler.load()
+print(f"Loaded state dict with {len(state_dict)} layers")
+
+# ============ LOAD TOKENIZER & LABEL ENCODER ============
 with open('tokenizer.pkl', 'rb') as f:
     tokenizer = pickle.load(f)
-print("Tokenizer loaded!")
 
-# ============ LOAD LABEL ENCODER ============
-print("Loading label encoder...")
 with open('label_encoder.pkl', 'rb') as f:
     label_encoder = pickle.load(f)
-print("Label encoder loaded!")
 
 # ============ MODEL PARAMETERS ============
 MAX_LEN = 150
@@ -77,7 +87,7 @@ class SentimentBiGRU(nn.Module):
 device = torch.device("cpu")
 print("Loading model weights...")
 model = SentimentBiGRU()
-model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
+model.load_state_dict(state_dict, strict=True)
 model.to(device)
 model.eval()
 print("Model loaded successfully!")
@@ -85,16 +95,13 @@ print("Model loaded successfully!")
 # ============ PREDICTION FUNCTION ============
 def predict_sentiment(review_text):
     try:
-        # Tokenize
         sequences = tokenizer.texts_to_sequences([review_text])
         padded = pad_sequences(sequences, maxlen=MAX_LEN, padding='post', truncating='post')
         text_tensor = torch.tensor(padded, dtype=torch.long).to(device)
 
-        # Metadata (zeros since we don't have location/rating)
         metadata = np.zeros((1, metadata_size), dtype=np.float32)
         metadata_tensor = torch.tensor(metadata, dtype=torch.float32).to(device)
 
-        # Predict
         with torch.no_grad():
             outputs = model(text_tensor, metadata_tensor)
             probs = outputs.cpu().numpy()[0]
@@ -106,7 +113,6 @@ def predict_sentiment(review_text):
         neu_prob = probs[1] * 100
         neg_prob = probs[2] * 100
 
-        # Build result
         result = f"""
 ==================================================
 ANALYSIS RESULTS
