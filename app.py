@@ -1,3 +1,6 @@
+# ============ CINEMA SENTIMENT ANALYSIS - COMPLETE APP ============
+# For Hugging Face Spaces Deployment
+
 import gradio as gr
 import torch
 import torch.nn as nn
@@ -15,8 +18,13 @@ from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
 
-# ============ LOAD SPLIT MODEL FILES ============
+# ============ PATHS ============
+
 MODEL_FOLDER = "best_sentiment_bigru"
+FLAG_PATH = "flagged_data/"
+os.makedirs(FLAG_PATH, exist_ok=True)
+
+# ============ LOAD SPLIT MODEL FILES ============
 
 def persistent_load(saved_id):
     if isinstance(saved_id, tuple) and len(saved_id) >= 5:
@@ -25,12 +33,12 @@ def persistent_load(saved_id):
         key = saved_id[2]
         location = saved_id[3]
         size = saved_id[4]
-        
+
         data_path = os.path.join(MODEL_FOLDER, 'data', str(key))
         if os.path.exists(data_path):
             with open(data_path, 'rb') as f:
                 raw_data = f.read()
-            
+
             array = np.frombuffer(raw_data, dtype=np.float32)
             storage = torch.FloatStorage.from_buffer(array.tobytes(), 'little')
             return storage
@@ -43,15 +51,38 @@ with open(os.path.join(MODEL_FOLDER, 'data.pkl'), 'rb') as f:
     state_dict = unpickler.load()
 print(f"Loaded state dict with {len(state_dict)} layers")
 
-# ============ LOAD TOKENIZER ============
-with open('tokenizer.pkl', 'rb') as f:
-    tokenizer = pickle.load(f)
+# ============ LOAD TOKENIZER & LABEL ENCODER ============
 
-# ============ LOAD LABEL ENCODER ============
+with open('word_index.pkl', 'rb') as f:
+    word_index = pickle.load(f)
+
+class SimpleTokenizer:
+    def __init__(self, word_index):
+        self.word_index = word_index
+        self.oov_token = '<OOV>'
+
+    def texts_to_sequences(self, texts):
+        sequences = []
+        for text in texts:
+            seq = []
+            for word in str(text).split():
+                word = word.lower().strip('.,!?;:()"\'')
+                if word in self.word_index:
+                    seq.append(self.word_index[word])
+                else:
+                    seq.append(1)
+            sequences.append(seq)
+        return sequences
+
+tokenizer = SimpleTokenizer(word_index)
+print(f"Loaded NEW tokenizer with {len(tokenizer.word_index)} words")
+
 with open('label_encoder.pkl', 'rb') as f:
     label_encoder = pickle.load(f)
+print("Label encoder loaded!")
 
 # ============ MODEL PARAMETERS ============
+
 MAX_LEN = 150
 vocab_size = 2103
 embedding_dim = 100
@@ -61,6 +92,7 @@ metadata_size = 3
 num_classes = 3
 
 # ============ MODEL ARCHITECTURE ============
+
 class SentimentBiGRU(nn.Module):
     def __init__(self):
         super().__init__()
@@ -93,30 +125,31 @@ class SentimentBiGRU(nn.Module):
         combined = torch.cat([pooled, meta], dim=1)
         return self.classifier(combined)
 
-# ============ LOAD MODEL ============
+# ============ LOAD MODEL WEIGHTS ============
+
 device = torch.device("cpu")
-print("Loading model weights...")
 model = SentimentBiGRU()
 model.load_state_dict(state_dict, strict=True)
 model.to(device)
 model.eval()
 print("Model loaded successfully!")
 
-# ============ CUSTOM TOKENIZATION ============
+# ============ HELPER FUNCTIONS ============
+
 def tokenize_text(text, max_len=150):
-    tokens = []
-    for word in str(text).split():
-        if word in tokenizer.word_index:
-            tokens.append(tokenizer.word_index[word])
-        else:
-            tokens.append(1)  # OOV token
-    if len(tokens) > max_len:
-        tokens = tokens[:max_len]
+    if not text or not text.strip():
+        return torch.zeros(max_len, dtype=torch.long)
+    sequences = tokenizer.texts_to_sequences([text])
+    if sequences and sequences[0]:
+        seq = sequences[0]
     else:
-        tokens = tokens + [0] * (max_len - len(tokens))
+        seq = []
+    if len(seq) > max_len:
+        tokens = seq[:max_len]
+    else:
+        tokens = seq + [0] * (max_len - len(seq))
     return torch.tensor(tokens, dtype=torch.long)
 
-# ============ EMOJI MAPPING ============
 def get_sentiment_emoji(sentiment):
     if sentiment == 'Positive':
         return '😊'
@@ -132,76 +165,6 @@ def get_confidence_emoji(confidence):
     else:
         return '🔴'
 
-# ============ PREDICTION FUNCTION ============
-def analyze_review_with_time(review_text, dt=None):
-    try:
-        text_tensor = tokenize_text(review_text, MAX_LEN).unsqueeze(0).to(device)
-        metadata = np.zeros((1, metadata_size), dtype=np.float32)
-        metadata_tensor = torch.tensor(metadata, dtype=torch.float32).to(device)
-        
-        with torch.no_grad():
-            outputs = model(text_tensor, metadata_tensor)
-            probs = outputs.cpu().numpy()[0]
-            class_idx = np.argmax(probs)
-            sentiment = label_encoder.classes_[class_idx]
-            confidence = probs[class_idx] * 100
-        
-        pos_prob = probs[0] * 100
-        neu_prob = probs[1] * 100
-        neg_prob = probs[2] * 100
-        
-        if dt is None:
-            timestamp_str = 'Not specified'
-            time_of_day = 'Not specified'
-            day_of_year = 0
-            week_number = 0
-            month = 0
-        else:
-            timestamp_str = dt.strftime('%Y-%m-%d %H:%M:%S')
-            time_of_day = 'Not specified'
-            day_of_year = 0
-            week_number = 0
-            month = 0
-        
-        result_lines = []
-        result_lines.append("=" * 50)
-        result_lines.append("ANALYSIS RESULTS")
-        result_lines.append("=" * 50)
-        result_lines.append("")
-        result_lines.append(f"Sentiment: {sentiment} {get_sentiment_emoji(sentiment)}")
-        result_lines.append(f"Confidence: {confidence:.1f}% {get_confidence_emoji(confidence)}")
-        result_lines.append(f"Date/Time: {timestamp_str}")
-        result_lines.append("")
-        result_lines.append("Score Breakdown:")
-        result_lines.append(f"  Positive: {pos_prob:.1f}%")
-        result_lines.append(f"  Neutral:  {neu_prob:.1f}%")
-        result_lines.append(f"  Negative: {neg_prob:.1f}%")
-        result_lines.append("")
-        result_lines.append("Review Preview:")
-        preview = review_text[:200] + "..." if len(review_text) > 200 else review_text
-        result_lines.append(f"  {preview}")
-        result_lines.append("")
-        result_lines.append(f"Word Count: {len(review_text.split())}")
-        result_lines.append("=" * 50)
-        
-        result = "\n".join(result_lines)
-        return sentiment, confidence, result, timestamp_str, time_of_day, day_of_year, week_number, month, dt, pos_prob, neu_prob, neg_prob
-    except Exception as e:
-        return "Error", 0, f"Error: {str(e)}", "Error", "Error", 0, 0, 0, None, 0, 0, 0
-
-# ============ RANDOM EXAMPLE ============
-def random_example():
-    examples = [
-        {"review": "The movie was amazing! Great acting and beautiful cinematography.", "date": "6/28/2025", "time": "9:36:11 AM"},
-        {"review": "Terrible service! The hall was dirty and the staff were rude.", "date": "6/27/2025", "time": "3:15:30 PM"},
-        {"review": "The movie was okay. Nothing special but I didn't hate it.", "date": "6/26/2025", "time": "7:20:45 PM"},
-        {"review": "Absolutely fantastic! Best movie I've seen this year. Highly recommend!", "date": "6/25/2025", "time": "10:00:00 AM"},
-        {"review": "Waste of money. The plot made no sense and the acting was terrible.", "date": "6/24/2025", "time": "11:45:20 PM"}
-    ]
-    example = random.choice(examples)
-    return example["review"], example["date"], example["time"]
-
-# ============ DATE/TIME PARSING ============
 def parse_datetime_advanced(dt_string):
     if not dt_string or not dt_string.strip():
         return None
@@ -244,67 +207,85 @@ def get_time_features(dt):
     month = dt.month
     return time_of_day, day_of_year, week_number, month
 
-def predict_with_time(review_text, date_input, time_input):
-    try:
-        if not review_text or not review_text.strip():
-            return "Please enter a review.", "No history.", "", default_table, gr.update(choices=default_choices), default_chart
-        
-        review = review_text.strip()
-        dt = None
-        if date_input and date_input.strip():
-            dt = build_datetime_from_parts(date_input, time_input)
-        
-        sentiment, confidence, full_result, timestamp_str, time_of_day, day_of_year, week_number, month_num, parsed_dt, pos_prob, neu_prob, neg_prob = analyze_review_with_time(review, dt)
-        
-        # Add to history
-        sentiment_history.append(f"[{timestamp_str}] {sentiment} ({confidence:.1f}%)")
-        preview = review[:50] + "..." if len(review) > 50 else review
-        all_reviews.append(preview)
-        
-        data_entry = {
-            'review': review,
-            'sentiment': sentiment,
-            'confidence': confidence,
-            'timestamp': timestamp_str,
-            'time_of_day': time_of_day,
-            'day_of_year': day_of_year,
-            'week_number': week_number,
-            'month': month_num,
-            'datetime': parsed_dt,
-            'emoji': get_sentiment_emoji(sentiment),
-            'full_result': full_result,
-            'pos_prob': pos_prob,
-            'neu_prob': neu_prob,
-            'neg_prob': neg_prob
-        }
-        
-        sentiment_data.append(data_entry)
-        all_results.append(data_entry.copy())
-        last_analysis_results.append(data_entry.copy())
-        
-        output = full_result
-        
-        if len(sentiment_data) > 1:
-            summary = generate_summary_text()
-            output = summary + "\n\n" + output
-        
-        history_text = "Recent History:\n"
-        if sentiment_history:
-            history_text += "\n".join(sentiment_history[-20:])
-            history_text += f"\n\nTotal: {len(sentiment_history)} reviews"
-        else:
-            history_text += "No history yet."
-        
-        analyzed_display, analyzed_choices = get_analyzed_results_display()
-        filtered_results_cache = all_results.copy()
-        chart_html = create_visualization_charts()
-        
-        return output, history_text, "", analyzed_display, gr.update(choices=analyzed_choices), chart_html
-        
-    except Exception as e:
-        return f"Error: {str(e)}", "Error occurred.", "", "", gr.update(choices=[]), create_empty_chart()
+# ============ ANALYSIS & PREDICTION FUNCTIONS ============
 
-# ============ STORE DATA ============
+def analyze_review_with_time(review_text, dt=None):
+    try:
+        if not review_text or len(review_text.strip()) < 5:
+            return "Neutral", 0, "Review too short to analyze.", "Not specified", "Not specified", 0, 0, 0, None, 0, 0, 0
+
+        text_tensor = tokenize_text(review_text, MAX_LEN).unsqueeze(0).to(device)
+        metadata = np.zeros((1, metadata_size), dtype=np.float32)
+        metadata_tensor = torch.tensor(metadata, dtype=torch.float32).to(device)
+
+        with torch.no_grad():
+            outputs = model(text_tensor, metadata_tensor)
+            probs = torch.softmax(outputs, dim=1).cpu().numpy()[0]
+
+        pos_prob = probs[0] * 100
+        neu_prob = probs[1] * 100
+        neg_prob = probs[2] * 100
+
+        class_idx = np.argmax(probs)
+        if class_idx == 0:
+            sentiment = "Negative"
+        elif class_idx == 1:
+            sentiment = "Neutral"
+        else:
+            sentiment = "Positive"
+
+        confidence = probs[class_idx] * 100
+
+        if dt is None:
+            timestamp_str = 'Not specified'
+            time_of_day = 'Not specified'
+            day_of_year = 0
+            week_number = 0
+            month = 0
+        else:
+            timestamp_str = dt.strftime('%Y-%m-%d %H:%M:%S')
+            time_of_day, day_of_year, week_number, month = get_time_features(dt)
+
+        result_lines = []
+        result_lines.append("-" * 50)
+        result_lines.append("ANALYSIS RESULTS")
+        result_lines.append("-" * 50)
+        result_lines.append("")
+        result_lines.append(f"Sentiment: {sentiment} {get_sentiment_emoji(sentiment)}")
+        result_lines.append(f"Confidence: {confidence:.1f}% {get_confidence_emoji(confidence)}")
+        result_lines.append(f"Date/Time: {timestamp_str}")
+        result_lines.append("")
+        result_lines.append("Score Breakdown:")
+        result_lines.append(f"  Positive: {pos_prob:.1f}%")
+        result_lines.append(f"  Neutral:  {neu_prob:.1f}%")
+        result_lines.append(f"  Negative: {neg_prob:.1f}%")
+        result_lines.append("")
+        result_lines.append("Review Preview:")
+        preview = review_text[:200] + "..." if len(review_text) > 200 else review_text
+        result_lines.append(f"  {preview}")
+        result_lines.append("")
+        result_lines.append(f"Word Count: {len(review_text.split())}")
+        result_lines.append("-" * 50)
+
+        result = "\n".join(result_lines)
+        return sentiment, confidence, result, timestamp_str, time_of_day, day_of_year, week_number, month, dt, pos_prob, neu_prob, neg_prob
+    except Exception as e:
+        print(f"Error: {e}")
+        return "Neutral", 0, f"Could not analyze: {str(e)}", "Not specified", "Not specified", 0, 0, 0, None, 0, 0, 0
+
+def random_example():
+    examples = [
+        {"review": "The movie was amazing! Great acting and beautiful cinematography.", "date": "6/28/2025", "time": "9:36:11 AM"},
+        {"review": "Terrible service! The hall was dirty and the staff were rude.", "date": "6/27/2025", "time": "3:15:30 PM"},
+        {"review": "The movie was okay. Nothing special but I didn't hate it.", "date": "6/26/2025", "time": "7:20:45 PM"},
+        {"review": "Absolutely fantastic! Best movie I've seen this year. Highly recommend!", "date": "6/25/2025", "time": "10:00:00 AM"},
+        {"review": "Waste of money. The plot made no sense and the acting was terrible.", "date": "6/24/2025", "time": "11:45:20 PM"}
+    ]
+    example = random.choice(examples)
+    return example["review"], example["date"], example["time"]
+
+# ============ DATA STORAGE & DISPLAY FUNCTIONS ============
+
 sentiment_history = []
 all_reviews = []
 all_results = []
@@ -313,10 +294,7 @@ sentiment_data = []
 filtered_results_cache = []
 filtered_flagged_cache = []
 analyzed_label_to_filename = {}
-FLAG_PATH = "flagged_data/"
-os.makedirs(FLAG_PATH, exist_ok=True)
 
-# ============ GENERATE SUMMARY ============
 def generate_summary_text():
     if not sentiment_data:
         return "No results to summarize yet."
@@ -351,7 +329,6 @@ def generate_summary_text():
         summary.append(f"  Low (70%-): {low_conf} ({low_conf/valid_total*100:.1f}%)")
     return "\n".join(summary)
 
-# ============ ANALYZED RESULTS DISPLAY ============
 def get_analyzed_results_display():
     if not all_results:
         return "No analyzed results yet.", []
@@ -627,6 +604,8 @@ def get_existing_flagged_reviews():
         except:
             pass
     return existing_reviews
+
+# ============ ACTION FUNCTIONS ============
 
 def select_all_analyzed():
     _, choices = get_analyzed_results_display()
@@ -1045,7 +1024,6 @@ def filter_analyzed_results(sentiment_filter):
         filtered_results_cache = [r for r in all_results if r.get('sentiment') == sentiment_filter]
     if not filtered_results_cache:
         return f"No {sentiment_filter} results found.", []
-    # Build HTML table (same as get_analyzed_results_display but with filtered data)
     html = """
     <style>
         .results-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -1204,7 +1182,8 @@ def filter_flagged_results(sentiment_filter):
         checkbox_choices.append(f"[{i}] {sentiment} - {short_date}")
     return html, gr.update(choices=checkbox_choices, value=checkbox_choices)
 
-# ============ CSV IMPORT ============
+# ============ CSV IMPORT FUNCTIONS ============
+
 def detect_columns(df):
     review_col = None
     datetime_col = None
@@ -1258,24 +1237,73 @@ def detect_columns(df):
 def display_imported_csv(file):
     if file is None:
         return "No file uploaded yet."
+
     try:
         df = pd.read_csv(file.name)
         if df.empty:
             return "CSV file is empty."
-        preview_html = f"<div class='import-info'>Imported {len(df)} rows, {len(df.columns)} columns</div>"
+
+        preview_html = """
+        <style>
+            .import-preview-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-family: "Play", sans-serif;
+                font-size: 13px;
+                background: #ffffff;
+            }
+            .import-preview-table th {
+                background: #D5C6E0;
+                color: #000000 !important;
+                padding: 10px;
+                text-align: left;
+                font-weight: 700;
+                border: 1px solid #2A0800 !important;
+            }
+            .import-preview-table td {
+                padding: 8px 10px;
+                border: 1px solid #2A0800 !important;
+                vertical-align: top;
+                background: #ffffff !important;
+                color: #000000 !important;
+            }
+            .import-preview-table tr:hover td {
+                background: #f5f0f7 !important;
+            }
+            .import-preview-container {
+                max-height: 400px;
+                overflow-y: auto;
+                border: 2px solid #2A0800 !important;
+                border-radius: 8px;
+                background: #ffffff;
+            }
+            .import-info {
+                color: #ffffff !important;
+                font-weight: 700;
+                padding: 8px 0;
+            }
+        </style>
+        """
+
+        preview_html += f"<div class='import-info'>Imported {len(df)} rows, {len(df.columns)} columns</div>"
+
         preview_html += '<div class="import-preview-container"><table class="import-preview-table"><thead><tr>'
         for col in df.columns[:10]:
             preview_html += f'<th>{col}</th>'
         preview_html += '</tr></thead><tbody>'
+
         for i, row in df.head(10).iterrows():
             preview_html += '<tr>'
             for col in df.columns[:10]:
                 val = str(row[col])[:50] + "..." if len(str(row[col])) > 50 else str(row[col])
-                preview_html += f'<td style="color:#000000 !important;">{val}</td>'
+                preview_html += f'<td>{val}</td>'
             preview_html += '</tr>'
+
         preview_html += '</tbody></table></div>'
+
         if len(df) > 10:
             preview_html += f"<div style='color:#ffffff; padding-top: 4px;'>... and {len(df) - 10} more rows</div>"
+
         return preview_html
     except Exception as e:
         return f"Error previewing CSV: {str(e)}"
@@ -1349,6 +1377,7 @@ def import_csv_batch(file):
         return f"Error reading CSV: {str(e)}", [], get_analyzed_results_display(), create_visualization_charts(), f"Error: {str(e)}"
 
 # ============ CUSTOM CSS ============
+
 custom_css = """
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Play:wght@400;700&display=swap');
 * { font-family: "Play", sans-serif !important; }
@@ -1428,24 +1457,67 @@ footer { text-align: center !important; margin-top: 16px !important; color: #AEA
 .date-input .gr-textbox-input:focus, .time-input .gr-textbox-input:focus, .date-input textarea:focus, .time-input textarea:focus { border-color: #D8DCFF !important; box-shadow: 0 0 0 3px rgba(216, 220, 255, 0.2) !important; }
 .date-input textarea::-webkit-scrollbar, .time-input textarea::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
 .date-input textarea, .time-input textarea { scrollbar-width: none !important; -ms-overflow-style: none !important; }
-.status-textbox textarea, .status-textbox .gr-textbox-input { background: transparent !important; border: none !important; box-shadow: none !important; color: #000000 !important; padding: 2px 0 !important; font-size: 13px !important; min-height: auto !important; max-height: none !important; }
-.status-textbox { background: transparent !important; border: none !important; box-shadow: none !important; padding: 4px 0 !important; min-height: auto !important; }
+
+/* ===== UPDATED STATUS TEXTBOX ===== */
+.status-textbox {
+    background: #000000 !important;
+    border: 2px solid #D5C6E0 !important;
+    border-radius: 8px !important;
+    padding: 12px 16px !important;
+    min-height: 50px !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important;
+}
+
+.status-textbox textarea,
+.status-textbox .gr-textbox-input {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: #ffffff !important;
+    font-size: 15px !important;
+    font-weight: 600 !important;
+    text-align: center !important;
+    padding: 4px 0 !important;
+    min-height: auto !important;
+    max-height: none !important;
+}
+
+/* Smaller status for quick messages like "Refreshed!" */
+.status-textbox-small {
+    background: #000000 !important;
+    border: 1.5px solid #D5C6E0 !important;
+    border-radius: 6px !important;
+    padding: 8px 12px !important;
+    min-height: 36px !important;
+}
+
+.status-textbox-small textarea,
+.status-textbox-small .gr-textbox-input {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: #ffffff !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    text-align: center !important;
+    padding: 2px 0 !important;
+    min-height: auto !important;
+}
+
 .tab-nav button { cursor: pointer !important; }
 .tabs { display: block !important; }
-.gr-checkbox-group { transition: none !important; }
+.gr-checkbox-group { transition: none !important;
 """
 
-# ============ INITIAL DATA ============
+# ============ BUILD GRADIO UI ============
+
 initial_flagged_display, initial_flagged_choices = get_flagged_display_table()
-initial_flagged_readable = get_readable_flagged_list()
 initial_analyzed_display, initial_analyzed_choices = get_analyzed_results_display()
 initial_chart_html = create_visualization_charts()
 
-# ============ DEFAULT PLACEHOLDERS ============
 default_table, default_choices = get_analyzed_results_display()
 default_chart = create_visualization_charts()
 
-# ============ GRADIO UI ============
 with gr.Blocks(title="Cinema Sentiment Analysis", css=custom_css) as demo:
     with gr.Row():
         with gr.Column(scale=9):
@@ -1459,7 +1531,7 @@ with gr.Blocks(title="Cinema Sentiment Analysis", css=custom_css) as demo:
                 confirm_no_btn = gr.Button("Cancel", variant="secondary", size="sm")
 
     with gr.Tabs() as tabs:
-        # TAB 1: Main Analysis
+        # ============ TAB 1: MAIN ANALYSIS ============
         with gr.TabItem("Main Analysis", id="tab_main"):
             with gr.Row():
                 with gr.Column(scale=2):
@@ -1475,7 +1547,7 @@ with gr.Blocks(title="Cinema Sentiment Analysis", css=custom_css) as demo:
                 with gr.Column(scale=1):
                     history_output = gr.Textbox(label="Recent History", lines=8, interactive=False, max_lines=999, elem_id="history_output")
 
-        # TAB 2: CSV Import
+        # ============ TAB 2: CSV IMPORT ============
         with gr.TabItem("CSV Import", id="tab_csv"):
             gr.Markdown("### Import CSV Batch")
             gr.Markdown("Upload a CSV file with reviews to analyze in batch.")
@@ -1492,13 +1564,9 @@ with gr.Blocks(title="Cinema Sentiment Analysis", css=custom_css) as demo:
             **CSV Format Guide:**
             - Column headers can be: 'review', 'text', 'comment', 'feedback', etc.
             - Optional datetime column: 'datetime', 'timestamp', 'date', 'time', etc.
-            
-            **Supported Date/Time Formats:**
-            - `6/28/2025 9:36:11 AM` (MM/DD/YYYY HH:MM:SS AM/PM)
-            - `2025-06-28 09:36:11` (YYYY-MM-DD HH:MM:SS)
             """)
 
-        # TAB 3: Manage Analyzed Results
+        # ============ TAB 3: MANAGE ANALYZED RESULTS ============
         with gr.TabItem("Manage Analyzed Results", id="tab_analyzed"):
             gr.Markdown("### Manage Analyzed Results")
             gr.Markdown("**Table showing all analyzed reviews with their sentiment scores.**")
@@ -1529,7 +1597,7 @@ with gr.Blocks(title="Cinema Sentiment Analysis", css=custom_css) as demo:
                         flag_low_btn = gr.Button("Flag Low Conf", variant="secondary", scale=1)
                     analyzed_status = gr.Textbox(label="", lines=1, placeholder="Check boxes below the table, then use the buttons above", interactive=False, max_lines=1, elem_classes="status-textbox")
 
-        # TAB 4: Flagged Data
+        # ============ TAB 4: FLAGGED DATA ============
         with gr.TabItem("Flagged Data", id="tab_flagged"):
             gr.Markdown("### Flagged Data Management")
             gr.Markdown("**Table showing all flagged reviews.**")
@@ -1556,14 +1624,14 @@ with gr.Blocks(title="Cinema Sentiment Analysis", css=custom_css) as demo:
                         save_flagged_all_btn = gr.Button("Save All", variant="secondary", scale=1)
                     flagged_status = gr.Textbox(label="", lines=1, placeholder="Check boxes below the table, then use the buttons above", interactive=False, max_lines=1, elem_classes="status-textbox")
 
-        # TAB 5: Summary & Visualizations
+        # ============ TAB 5: SUMMARY & VISUALIZATIONS ============
         with gr.TabItem("Summary & Visualizations", id="tab_summary"):
             gr.Markdown("### Sentiment Analysis Summary")
             gr.Markdown("Interactive charts showing sentiment distribution, confidence levels, and trends over time.")
             with gr.Row():
                 summary_output = gr.HTML(label="Charts", value=initial_chart_html)
 
-    # Footer
+    # ============ FOOTER ============
     gr.Markdown("---")
     gr.Markdown("""
     Group 8 - TNL6323 Natural Language Processing
@@ -1571,7 +1639,7 @@ with gr.Blocks(title="Cinema Sentiment Analysis", css=custom_css) as demo:
     | Thomas Tan Yi Wei 243UT245LB
     | Enzo Joaquin Itona Erfe 1231300995
     | Michelle Theba 1231302828
-    
+
     **Domain:** Movie/Entertainment Reviews (Malaysia Context)
     **Project:** Cinema Sentiment Analysis System
     """)
@@ -1579,33 +1647,170 @@ with gr.Blocks(title="Cinema Sentiment Analysis", css=custom_css) as demo:
     gr.Markdown("2026 Group 8 | TNL6323 Natural Language Processing")
 
     # ============ EVENT HANDLERS ============
-    submit_btn.click(fn=predict_with_time, inputs=[text_input, date_input, time_input], outputs=[output, history_output, analyzed_status, analyzed_table, analyzed_checkbox, summary_output])
+
+    def predict_with_time_wrapper(review_text, date_input, time_input):
+        try:
+            if not review_text or not review_text.strip():
+                return "Please enter a review.", "No history.", "", default_table, gr.update(choices=default_choices), default_chart
+
+            review = review_text.strip()
+            dt = None
+            if date_input and date_input.strip():
+                dt = build_datetime_from_parts(date_input, time_input)
+
+            sentiment, confidence, full_result, timestamp_str, time_of_day, day_of_year, week_number, month_num, parsed_dt, pos_prob, neu_prob, neg_prob = analyze_review_with_time(review, dt)
+
+            sentiment_history.append(f"[{timestamp_str}] {sentiment} ({confidence:.1f}%)")
+            preview = review[:50] + "..." if len(review) > 50 else review
+            all_reviews.append(preview)
+
+            data_entry = {
+                'review': review,
+                'sentiment': sentiment,
+                'confidence': confidence,
+                'timestamp': timestamp_str,
+                'time_of_day': time_of_day,
+                'day_of_year': day_of_year,
+                'week_number': week_number,
+                'month': month_num,
+                'datetime': parsed_dt,
+                'emoji': get_sentiment_emoji(sentiment),
+                'full_result': full_result,
+                'pos_prob': pos_prob,
+                'neu_prob': neu_prob,
+                'neg_prob': neg_prob
+            }
+
+            sentiment_data.append(data_entry)
+            all_results.append(data_entry.copy())
+            last_analysis_results.append(data_entry.copy())
+
+            output = full_result
+
+            if len(sentiment_data) > 1:
+                summary = generate_summary_text()
+                output = summary + "\n\n" + output
+
+            history_text = "Recent History:\n"
+            if sentiment_history:
+                history_text += "\n".join(sentiment_history[-20:])
+                history_text += f"\n\nTotal: {len(sentiment_history)} reviews"
+            else:
+                history_text += "No history yet."
+
+            analyzed_display, analyzed_choices = get_analyzed_results_display()
+            filtered_results_cache = all_results.copy()
+            chart_html = create_visualization_charts()
+
+            return output, history_text, "", analyzed_display, gr.update(choices=analyzed_choices), chart_html
+
+        except Exception as e:
+            return f"Error: {str(e)}", "Error occurred.", "", "", gr.update(choices=[]), create_empty_chart()
+
+    submit_btn.click(
+        fn=predict_with_time_wrapper,
+        inputs=[text_input, date_input, time_input],
+        outputs=[output, history_output, analyzed_status, analyzed_table, analyzed_checkbox, summary_output]
+    )
+
     random_btn.click(fn=random_example, outputs=[text_input, date_input, time_input])
-    clear_btn.click(fn=clear_history, outputs=[output, history_output, analyzed_status, analyzed_table, analyzed_checkbox, summary_output])
-    import_btn.click(fn=import_csv_batch, inputs=[csv_file], outputs=[csv_status, analyzed_checkbox, analyzed_table, summary_output, csv_preview])
+
+    clear_btn.click(
+        fn=clear_history,
+        outputs=[output, history_output, analyzed_status, analyzed_table, analyzed_checkbox, summary_output]
+    )
+
+    import_btn.click(
+        fn=import_csv_batch,
+        inputs=[csv_file],
+        outputs=[csv_status, analyzed_checkbox, analyzed_table, summary_output, csv_preview]
+    )
+
     csv_file.change(fn=display_imported_csv, inputs=[csv_file], outputs=[csv_preview])
+
     filter_dropdown.change(fn=filter_analyzed_results, inputs=[filter_dropdown], outputs=[analyzed_table, analyzed_checkbox])
+
     select_all_analyzed_btn.click(fn=select_all_analyzed, outputs=[analyzed_checkbox])
     deselect_all_analyzed_btn.click(fn=deselect_all_analyzed, outputs=[analyzed_checkbox])
-    delete_selected_btn.click(fn=delete_selected_from_table, inputs=[analyzed_checkbox], outputs=[analyzed_status]).then(fn=refresh_analyzed, outputs=[analyzed_table, analyzed_checkbox, analyzed_status])
-    delete_all_btn.click(fn=delete_all_analyzed, outputs=[analyzed_status]).then(fn=refresh_analyzed, outputs=[analyzed_table, analyzed_checkbox, analyzed_status])
-    save_selected_btn.click(fn=save_selected_results_from_table, inputs=[analyzed_checkbox], outputs=[analyzed_status])
+
+    delete_selected_btn.click(
+        fn=delete_selected_from_table,
+        inputs=[analyzed_checkbox],
+        outputs=[analyzed_status]
+    ).then(fn=refresh_analyzed, outputs=[analyzed_table, analyzed_checkbox, analyzed_status])
+
+    delete_all_btn.click(
+        fn=delete_all_analyzed,
+        outputs=[analyzed_status]
+    ).then(fn=refresh_analyzed, outputs=[analyzed_table, analyzed_checkbox, analyzed_status])
+
+    save_selected_btn.click(
+        fn=save_selected_results_from_table,
+        inputs=[analyzed_checkbox],
+        outputs=[analyzed_status]
+    )
+
     save_all_btn.click(fn=save_all_results, outputs=[analyzed_status])
-    flag_selected_btn.click(fn=flag_selected_from_table, inputs=[analyzed_checkbox], outputs=[analyzed_status]).then(fn=refresh_flagged, outputs=[flagged_checkbox, flagged_table])
-    flag_all_btn.click(fn=flag_all_from_table, outputs=[analyzed_status]).then(fn=refresh_flagged, outputs=[flagged_checkbox, flagged_table])
-    flag_low_btn.click(fn=flag_low_confidence, inputs=[analyzed_checkbox], outputs=[analyzed_status]).then(fn=refresh_flagged, outputs=[flagged_checkbox, flagged_table])
-    flagged_filter_dropdown.change(fn=filter_flagged_results, inputs=[flagged_filter_dropdown], outputs=[flagged_table, flagged_checkbox])
+
+    flag_selected_btn.click(
+        fn=flag_selected_from_table,
+        inputs=[analyzed_checkbox],
+        outputs=[analyzed_status]
+    ).then(fn=refresh_flagged, outputs=[flagged_checkbox, flagged_table])
+
+    flag_all_btn.click(
+        fn=flag_all_from_table,
+        outputs=[analyzed_status]
+    ).then(fn=refresh_flagged, outputs=[flagged_checkbox, flagged_table])
+
+    flag_low_btn.click(
+        fn=flag_low_confidence,
+        inputs=[analyzed_checkbox],
+        outputs=[analyzed_status]
+    ).then(fn=refresh_flagged, outputs=[flagged_checkbox, flagged_table])
+
+    flagged_filter_dropdown.change(
+        fn=filter_flagged_results,
+        inputs=[flagged_filter_dropdown],
+        outputs=[flagged_table, flagged_checkbox]
+    )
+
     select_all_flagged_btn.click(fn=select_all_flagged, outputs=[flagged_checkbox])
     deselect_all_flagged_btn.click(fn=deselect_all_flagged, outputs=[flagged_checkbox])
-    delete_flagged_btn.click(fn=delete_flagged_results, inputs=[flagged_checkbox], outputs=[flagged_status, flagged_checkbox, flagged_table])
-    delete_all_flagged_btn.click(fn=delete_all_flagged, outputs=[flagged_status, flagged_checkbox, flagged_table])
-    save_flagged_selected_btn.click(fn=save_flagged_selected, inputs=[flagged_checkbox], outputs=[flagged_status])
+
+    delete_flagged_btn.click(
+        fn=delete_flagged_results,
+        inputs=[flagged_checkbox],
+        outputs=[flagged_status, flagged_checkbox, flagged_table]
+    )
+
+    delete_all_flagged_btn.click(
+        fn=delete_all_flagged,
+        outputs=[flagged_status, flagged_checkbox, flagged_table]
+    )
+
+    save_flagged_selected_btn.click(
+        fn=save_flagged_selected,
+        inputs=[flagged_checkbox],
+        outputs=[flagged_status]
+    )
+
     save_flagged_all_btn.click(fn=save_flagged_all, outputs=[flagged_status])
+
+    # Tab auto-refresh
     tabs.select(fn=refresh_analyzed, inputs=None, outputs=[analyzed_table, analyzed_checkbox, analyzed_status], show_progress=False)
     tabs.select(fn=refresh_flagged, inputs=None, outputs=[flagged_checkbox, flagged_table], show_progress=False)
     tabs.select(fn=create_visualization_charts, inputs=None, outputs=[summary_output], show_progress=False)
+
+    # Reset
     reset_btn.click(fn=confirm_reset, outputs=[confirm_row, reset_btn])
     confirm_no_btn.click(fn=cancel_reset, outputs=[confirm_row, reset_btn])
-    confirm_yes_btn.click(fn=execute_reset, outputs=[reset_status, history_output, flagged_table, flagged_checkbox, analyzed_table, analyzed_checkbox, confirm_row, reset_btn, reset_status, summary_output])
+    confirm_yes_btn.click(
+        fn=execute_reset,
+        outputs=[reset_status, history_output, flagged_table, flagged_checkbox, analyzed_table, analyzed_checkbox, confirm_row, reset_btn, reset_status, summary_output]
+    )
 
-demo.launch()
+# ============ LAUNCH APP ============
+
+if __name__ == "__main__":
+    demo.launch()
