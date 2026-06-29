@@ -28,12 +28,13 @@ jobs:
           git archive HEAD | tar -x -C hf-sync
 
           cd hf-sync
-          git init
+          git init -b main
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git lfs install --local
           git lfs track "*.pt" "*.pth" "*.bin" "*.safetensors" "*.keras" "*.h5" "glove*.txt" "model training/data/glove*.txt"
           git add .gitattributes
           git add .
           git commit -m "Sync Space files"
-          git branch -M main
           git remote add hf "https://user:${HF_TOKEN}@huggingface.co/spaces/CJY0129/cinema-sentiment-analysis"
           git push hf main --force
