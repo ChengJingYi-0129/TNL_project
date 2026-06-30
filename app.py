@@ -400,7 +400,7 @@ def get_analyzed_results_display():
         checkbox_choices.append(f"[{i}] {res.get('sentiment', 'Unknown')} - {date_part}")
     return html, checkbox_choices
 
-# ============ FLAGGED DATA FUNCTIONS (FIXED) ============
+## ============ FLAGGED DATA FUNCTIONS (FIXED - MATCHES ANALYZED DISPLAY) ============
 
 def get_flagged_files():
     if not os.path.exists(FLAG_PATH):
@@ -409,32 +409,32 @@ def get_flagged_files():
     return sorted(files)
 
 def parse_flagged_file(filepath):
+    """Parse a flagged CSV file - reads the CSV properly like a DataFrame"""
     try:
-        # Read CSV with pandas
+        # Read the CSV file
         df = pd.read_csv(filepath, encoding='utf-8')
         
         if df.empty:
             return None
         
+        # Get the first row (each file has one review)
         row = df.iloc[0]
         
-        # Extract review text
+        # Now extract data - just like how we store in all_results
         review_full = str(row.get('Review', ''))
         if review_full == 'nan':
             review_full = ''
         
         review_preview = review_full[:50] + "..." if len(review_full) > 50 else review_full
         
-        # Extract sentiment
         sentiment = str(row.get('Sentiment', 'Unknown'))
         if sentiment == 'nan':
             sentiment = 'Unknown'
         
-        # Extract confidence
         confidence_str = str(row.get('Confidence', '0'))
         confidence = float(confidence_str.replace('%', '')) if confidence_str != 'nan' else 0
         
-        # Extract probabilities
+        # Parse probabilities
         def parse_prob(val):
             val_str = str(val)
             if val_str == 'nan':
@@ -445,12 +445,11 @@ def parse_flagged_file(filepath):
         neu_prob = parse_prob(row.get('Neutral%', 0))
         neg_prob = parse_prob(row.get('Negative%', 0))
         
-        # Extract timestamp
         timestamp = str(row.get('Timestamp', ''))
         if timestamp == 'nan':
             timestamp = ''
         
-        # Extract date from timestamp
+        # Extract date
         date_str = ''
         if timestamp:
             date_match = re.search(r'(\d{4}-\d{2}-\d{2})', timestamp)
@@ -458,7 +457,6 @@ def parse_flagged_file(filepath):
                 date_str = date_match.group(1)
         
         return {
-            'content': '',
             'sentiment': sentiment,
             'confidence': confidence,
             'pos_prob': pos_prob,
@@ -472,40 +470,28 @@ def parse_flagged_file(filepath):
         }
         
     except Exception as e:
-        print(f"Error parsing flagged file {filepath}: {e}")
+        print(f"Error parsing {filepath}: {e}")
         return None
 
-def get_existing_flagged_reviews():
-    existing_reviews = {}
-    files = get_flagged_files()
-    
-    for file in files:
-        filepath = os.path.join(FLAG_PATH, file)
-        parsed = parse_flagged_file(filepath)
-        if parsed:
-            review_text = parsed.get('review_full', '').strip()
-            date_text = parsed.get('date', 'No date')
-            if review_text:
-                key = (review_text, date_text)
-                existing_reviews[key] = file
-    
-    return existing_reviews
-
 def get_flagged_display_table():
+    """Display flagged data - EXACTLY like analyzed results display"""
     files = get_flagged_files()
+    
     if not files:
         return "No flagged data yet.", []
     
-    parsed_files = []
+    # Parse all flagged files into a list (like all_results)
+    flagged_data = []
     for file in files:
         filepath = os.path.join(FLAG_PATH, file)
         parsed = parse_flagged_file(filepath)
         if parsed:
-            parsed_files.append(parsed)
+            flagged_data.append(parsed)
     
-    if not parsed_files:
+    if not flagged_data:
         return "No flagged data could be parsed.", []
     
+    # Build HTML table - EXACT SAME STYLE as analyzed results
     html = """
     <style>
         .flagged-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -539,7 +525,7 @@ def get_flagged_display_table():
             <tbody>
     """
     
-    for i, parsed in enumerate(parsed_files, 1):
+    for i, parsed in enumerate(flagged_data, 1):
         sentiment = parsed.get('sentiment', 'Unknown')
         emoji = get_sentiment_emoji(sentiment)
         confidence = parsed.get('confidence', 0)
@@ -572,10 +558,11 @@ def get_flagged_display_table():
     </div>
     """
     
-    html += f"<br><span class='table-total'>Total: {len(parsed_files)} flagged files</span>"
+    html += f"<br><span class='table-total'>Total: {len(flagged_data)} flagged files</span>"
     
+    # Create checkbox choices - EXACT same format as analyzed
     checkbox_choices = []
-    for i, parsed in enumerate(parsed_files, 1):
+    for i, parsed in enumerate(flagged_data, 1):
         sentiment = parsed.get('sentiment', 'Unknown')
         date_display = parsed.get('date', 'Unknown')
         short_date = date_display[:10] if len(date_display) >= 10 else date_display
@@ -583,9 +570,133 @@ def get_flagged_display_table():
     
     return html, checkbox_choices
 
+def get_existing_flagged_reviews():
+    """Get existing flagged reviews for duplicate checking"""
+    existing_reviews = {}
+    files = get_flagged_files()
+    
+    for file in files:
+        filepath = os.path.join(FLAG_PATH, file)
+        parsed = parse_flagged_file(filepath)
+        if parsed:
+            review_text = parsed.get('review_full', '').strip()
+            date_text = parsed.get('date', 'No date')
+            if review_text:
+                key = (review_text, date_text)
+                existing_reviews[key] = file
+    
+    return existing_reviews
+
 def refresh_flagged():
+    """Refresh flagged data display"""
     display, checkbox_choices = get_flagged_display_table()
     return display, gr.update(choices=checkbox_choices, value=[])
+
+def filter_flagged_results(sentiment_filter):
+    """Filter flagged results - EXACTLY like filter_analyzed_results"""
+    global filtered_flagged_cache
+    
+    files = get_flagged_files()
+    if not files:
+        return "No flagged data yet.", []
+    
+    # Parse all flagged files
+    flagged_data = []
+    for file in files:
+        filepath = os.path.join(FLAG_PATH, file)
+        parsed = parse_flagged_file(filepath)
+        if parsed:
+            flagged_data.append(parsed)
+    
+    if not flagged_data:
+        return "No flagged data yet.", []
+    
+    # Filter - EXACT same logic as analyzed filter
+    if sentiment_filter == "All":
+        filtered_flagged_cache = flagged_data
+    else:
+        filtered_flagged_cache = [f for f in flagged_data if f.get('sentiment') == sentiment_filter]
+    
+    if not filtered_flagged_cache:
+        return f"No {sentiment_filter} flagged files found.", []
+    
+    # Build HTML - EXACT same style
+    html = """
+    <style>
+        .flagged-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .flagged-table th { background: #D5C6E0; color: #000000 !important; padding: 10px; text-align: left; font-weight: 700; border: 1px solid #2A0800 !important; }
+        .flagged-table td { padding: 8px 10px; border: 1px solid #2A0800 !important; vertical-align: top; background: #ffffff; }
+        .flagged-table tr:hover td { background: #f5f0f7 !important; }
+        .flagged-container { max-height: 400px; overflow-y: auto; border: 2px solid #2A0800 !important; border-radius: 8px; background: #ffffff; }
+        .table-total { color: #ffffff !important; font-weight: 700; }
+        .sentiment-pos { color: #2ecc71 !important; font-weight: 700; }
+        .sentiment-neu { color: #f1c40f !important; font-weight: 700; }
+        .sentiment-neg { color: #e74c3c !important; font-weight: 700; }
+        .conf-high { color: #2ecc71 !important; font-weight: 700; }
+        .conf-low { color: #e74c3c !important; font-weight: 700; }
+        .review-preview { max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #000000 !important; }
+        .review-preview:hover { white-space: normal; overflow: visible; background: #ffffff; position: relative; z-index: 20; box-shadow: 0 2px 8px rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 4px; border: 1px solid #2A0800; }
+    </style>
+    <div class="flagged-container">
+        <table class="flagged-table">
+            <thead>
+                <tr>
+                    <th style="width:40px;">#</th>
+                    <th style="width:100px;">Sentiment</th>
+                    <th style="width:100px;">Confidence</th>
+                    <th style="width:80px;">Positive</th>
+                    <th style="width:80px;">Neutral</th>
+                    <th style="width:80px;">Negative</th>
+                    <th style="width:180px;">Date/Time</th>
+                    <th>Review</th>
+                </tr>
+            </thead>
+            <tbody>
+    """
+    
+    for i, parsed in enumerate(filtered_flagged_cache, 1):
+        sentiment = parsed.get('sentiment', 'Unknown')
+        emoji = get_sentiment_emoji(sentiment)
+        confidence = parsed.get('confidence', 0)
+        pos_prob = parsed.get('pos_prob', 0)
+        neu_prob = parsed.get('neu_prob', 0)
+        neg_prob = parsed.get('neg_prob', 0)
+        date_display = parsed.get('date', 'Unknown')
+        review = parsed.get('review_preview', '')
+        review_full = parsed.get('review_full', '')
+        
+        sent_class = 'sentiment-pos' if sentiment == 'Positive' else 'sentiment-neu' if sentiment == 'Neutral' else 'sentiment-neg'
+        conf_class = 'conf-high' if confidence >= 70 else 'conf-low'
+        
+        html += f"""
+            <tr>
+                <td style="color:#000000 !important; text-align:center;">{i}</td>
+                <td class="{sent_class}">{emoji} {sentiment}</td>
+                <td class="{conf_class}">{confidence:.1f}%</td>
+                <td style="color:#000000 !important;">{pos_prob:.1f}%</td>
+                <td style="color:#000000 !important;">{neu_prob:.1f}%</td>
+                <td style="color:#000000 !important;">{neg_prob:.1f}%</td>
+                <td style="color:#000000 !important;">{date_display}</td>
+                <td class="review-preview" title="{review_full}" style="color:#000000 !important;">{review}</td>
+            </tr>
+        """
+    
+    html += """
+            </tbody>
+        </table>
+    </div>
+    """
+    
+    html += f"<br><span class='table-total'>Total: {len(filtered_flagged_cache)} flagged files (filtered: {sentiment_filter})</span>"
+    
+    checkbox_choices = []
+    for i, parsed in enumerate(filtered_flagged_cache, 1):
+        sentiment = parsed.get('sentiment', 'Unknown')
+        date_display = parsed.get('date', 'Unknown')
+        short_date = date_display[:10] if len(date_display) >= 10 else date_display
+        checkbox_choices.append(f"[{i}] {sentiment} - {short_date}")
+    
+    return html, gr.update(choices=checkbox_choices, value=checkbox_choices)
 
 # ============ FLAG FUNCTIONS ============
 
