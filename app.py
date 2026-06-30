@@ -1,3 +1,6 @@
+# ============ CINEMA SENTIMENT ANALYSIS - COMPLETE APP ============
+# For Hugging Face Spaces Deployment
+
 import gradio as gr
 import numpy as np
 import pickle
@@ -19,18 +22,18 @@ from collections import defaultdict
 
 warnings.filterwarnings('ignore')
 
-# ============ MOUNT GOOGLE DRIVE ============
-from google.colab import drive
-drive.mount('/content/drive')
+# ============ PATHS ============
+# For Hugging Face Spaces, models are in the same directory
+BASE_PATH = './'
+MODEL_PATH = './'
+FLAG_PATH = './flagged_data/'
+os.makedirs(FLAG_PATH, exist_ok=True)
 
-# Set your Drive folder path
-BASE_PATH = '/content/drive/MyDrive/NLP/Project/Sentiment Deployment/'
-
-print("Loading model from Google Drive...")
+print("Loading model...")
 
 # ============ LOAD MODEL ============
-# Read config directly from Drive
-with open(BASE_PATH + 'config.json', 'r') as f:
+# Read config
+with open('config.json', 'r') as f:
     config = json.load(f)
 
 vocab_size = 2596
@@ -55,15 +58,15 @@ output = Dense(3, activation='softmax', name='dense_5')(dropout1)
 
 model = Model(inputs=[text_input, meta_input], outputs=output)
 
-# Load weights directly from Drive
-model.load_weights(BASE_PATH + 'model.weights.h5')
+# Load weights
+model.load_weights('model.weights.h5')
 print("Model loaded")
 
 # ============ LOAD TOKENIZER AND LABEL ENCODER ============
-with open(BASE_PATH + 'tokenizer.pkl', 'rb') as f:
+with open('tokenizer.pkl', 'rb') as f:
     tokenizer = pickle.load(f)
 
-with open(BASE_PATH + 'label_encoder.pkl', 'rb') as f:
+with open('label_encoder.pkl', 'rb') as f:
     label_encoder = pickle.load(f)
 
 print("Tokenizer and label encoder loaded")
@@ -77,9 +80,6 @@ sentiment_data = []
 filtered_results_cache = []
 filtered_flagged_cache = []
 analyzed_label_to_filename = {}
-
-FLAG_PATH = BASE_PATH + 'flagged_data/'
-os.makedirs(FLAG_PATH, exist_ok=True)
 
 # ==================== EMOJI MAPPING ====================
 def get_sentiment_emoji(sentiment):
@@ -384,7 +384,7 @@ def generate_summary_text():
 
     return "\n".join(summary)
 
-# ==================== FLAGGED DATA FUNCTIONS (COMPLETELY REWRITTEN) ====================
+# ==================== FLAGGED DATA FUNCTIONS ====================
 
 def get_flagged_files():
     """Get list of flagged CSV files"""
@@ -2734,12 +2734,6 @@ with gr.Blocks(title="Cinema Sentiment Analysis", css=custom_css) as demo:
             **CSV Format Guide:**
             - Column headers can be: 'review', 'text', 'comment', 'feedback', etc.
             - Optional datetime column: 'datetime', 'timestamp', 'date', 'time', etc.
-
-            **Supported Date/Time Formats:**
-            - `6/28/2025 9:36:11 AM` (MM/DD/YYYY HH:MM:SS AM/PM)
-            - `2025-06-28 09:36:11` (YYYY-MM-DD HH:MM:SS)
-            - `28062025093611` (DDMMYYYYHHMMSS)
-            - `20250628093611` (YYYYMMDDHHMMSS)
             """)
 
         # ==================== TAB 3: Manage Analyzed Results ====================
@@ -3087,9 +3081,6 @@ with gr.Blocks(title="Cinema Sentiment Analysis", css=custom_css) as demo:
         ]
     )
 
-print("\n" + "="*50)
-print("APP IS RUNNING!")
-print("="*50)
-print(f"\nFlagged data will be saved to: {FLAG_PATH}")
-
-demo.launch(share=True)
+# ==================== LAUNCH APP ====================
+if __name__ == "__main__":
+    demo.launch()
