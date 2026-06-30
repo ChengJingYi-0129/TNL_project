@@ -674,11 +674,11 @@ def delete_all_analyzed():
     filtered_results_cache = []
     return f"Deleted all {count} results."
 
-# ============ SAVE FUNCTIONS (Fixed) ============
+# ============ DOWNLOAD FUNCTIONS (WORKING) ============
 
 def save_selected_results_from_table(selected_labels):
     if not selected_labels or not filtered_results_cache:
-        return "No results selected.", None
+        return "No results selected."
     
     selected_results = []
     for label in selected_labels:
@@ -689,65 +689,37 @@ def save_selected_results_from_table(selected_labels):
                 selected_results.append(filtered_results_cache[idx])
     
     if not selected_results:
-        return "No valid results selected.", None
+        return "No valid results selected."
     
     # Create CSV
-    import io
-    import csv
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(['Review', 'Sentiment', 'Confidence', 'Positive%', 'Neutral%', 'Negative%', 'Date/Time'])
-    
+    csv_data = "Review,Sentiment,Confidence,Positive%,Neutral%,Negative%,Date/Time\n"
     for res in selected_results:
-        writer.writerow([
-            res.get('review', ''),
-            res.get('sentiment', ''),
-            f"{res.get('confidence', 0):.1f}%",
-            f"{res.get('pos_prob', 0):.1f}%",
-            f"{res.get('neu_prob', 0):.1f}%",
-            f"{res.get('neg_prob', 0):.1f}%",
-            res.get('timestamp', '')
-        ])
+        csv_data += f'"{res.get("review", "")}",{res.get("sentiment", "")},{res.get("confidence", 0):.1f}%,{res.get("pos_prob", 0):.1f}%,{res.get("neu_prob", 0):.1f}%,{res.get("neg_prob", 0):.1f}%,{res.get("timestamp", "")}\n'
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"exported_results_{timestamp}.csv"
     
-    # Create a file object
-    file_obj = gr.File(
-        value=output.getvalue().encode('utf-8'),
+    return gr.File(
+        value=csv_data.encode('utf-8'),
         filename=filename,
         visible=True
     )
-    
-    return f"✅ Downloaded {len(selected_results)} results!", file_obj
 
 def save_all_results():
     if not all_results:
-        return "No results to save.", None
+        return "No results to save."
     
-    import io
-    import csv
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(['Review', 'Sentiment', 'Confidence', 'Positive%', 'Neutral%', 'Negative%', 'Date/Time'])
-    
+    csv_data = "Review,Sentiment,Confidence,Positive%,Neutral%,Negative%,Date/Time\n"
     for res in all_results:
-        writer.writerow([
-            res.get('review', ''),
-            res.get('sentiment', ''),
-            f"{res.get('confidence', 0):.1f}%",
-            f"{res.get('pos_prob', 0):.1f}%",
-            f"{res.get('neu_prob', 0):.1f}%",
-            f"{res.get('neg_prob', 0):.1f}%",
-            res.get('timestamp', '')
-        ])
+        csv_data += f'"{res.get("review", "")}",{res.get("sentiment", "")},{res.get("confidence", 0):.1f}%,{res.get("pos_prob", 0):.1f}%,{res.get("neu_prob", 0):.1f}%,{res.get("neg_prob", 0):.1f}%,{res.get("timestamp", "")}\n'
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"exported_all_results_{timestamp}.csv"
     
-    return f"Downloaded all {len(all_results)} results!", gr.File(
-        value=output.getvalue().encode('utf-8'),
-        filename=filename
+    return gr.File(
+        value=csv_data.encode('utf-8'),
+        filename=filename,
+        visible=True
     )
 
 # ============ FLAG FUNCTIONS (Save to VM) ============
@@ -939,7 +911,8 @@ def delete_all_flagged():
 
 def save_flagged_selected(selected_labels):
     if not selected_labels:
-        return "No files selected.", None
+        return "No files selected."
+    
     selected_files = []
     for label in selected_labels:
         if label in analyzed_label_to_filename:
@@ -951,82 +924,61 @@ def save_flagged_selected(selected_labels):
                 files = get_flagged_files()
                 if 0 <= idx < len(files):
                     selected_files.append(files[idx])
+    
     if not selected_files:
-        return "No valid files selected.", None
+        return "No valid files selected."
     
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(['Review', 'Sentiment', 'Confidence', 'Positive%', 'Neutral%', 'Negative%', 'Date/Time'])
-    
+    csv_data = "Review,Sentiment,Confidence,Positive%,Neutral%,Negative%,Date/Time\n"
     saved_count = 0
     for file in selected_files:
         filepath = os.path.join(FLAG_PATH, file)
         try:
             parsed = parse_flagged_file(filepath)
             if parsed:
-                writer.writerow([
-                    parsed.get('review_full', ''),
-                    parsed.get('sentiment', 'Unknown'),
-                    f"{parsed.get('confidence', 0):.1f}%",
-                    f"{parsed.get('pos_prob', 0):.1f}%",
-                    f"{parsed.get('neu_prob', 0):.1f}%",
-                    f"{parsed.get('neg_prob', 0):.1f}%",
-                    parsed.get('date', '')
-                ])
+                csv_data += f'"{parsed.get("review_full", "")}",{parsed.get("sentiment", "Unknown")},{parsed.get("confidence", 0):.1f}%,{parsed.get("pos_prob", 0):.1f}%,{parsed.get("neu_prob", 0):.1f}%,{parsed.get("neg_prob", 0):.1f}%,{parsed.get("date", "")}\n'
                 saved_count += 1
-        except Exception as e:
-            print(f"Error reading {file}: {e}")
+        except:
+            pass
     
     if saved_count == 0:
-        return "No valid data found in selected files.", None
+        return "No valid data found."
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"flagged_export_{timestamp}.csv"
     
-    return f"✅ Downloaded {saved_count} flagged files!", gr.File(
-        value=output.getvalue().encode('utf-8'),
+    return gr.File(
+        value=csv_data.encode('utf-8'),
         filename=filename,
-        file_type="csv"
+        visible=True
     )
 
 def save_flagged_all():
     files = get_flagged_files()
     if not files:
-        return "No flagged files to save.", None
+        return "No flagged files to save."
     
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(['Review', 'Sentiment', 'Confidence', 'Positive%', 'Neutral%', 'Negative%', 'Date/Time'])
-    
+    csv_data = "Review,Sentiment,Confidence,Positive%,Neutral%,Negative%,Date/Time\n"
     saved_count = 0
     for file in files:
         filepath = os.path.join(FLAG_PATH, file)
         try:
             parsed = parse_flagged_file(filepath)
             if parsed:
-                writer.writerow([
-                    parsed.get('review_full', ''),
-                    parsed.get('sentiment', 'Unknown'),
-                    f"{parsed.get('confidence', 0):.1f}%",
-                    f"{parsed.get('pos_prob', 0):.1f}%",
-                    f"{parsed.get('neu_prob', 0):.1f}%",
-                    f"{parsed.get('neg_prob', 0):.1f}%",
-                    parsed.get('date', '')
-                ])
+                csv_data += f'"{parsed.get("review_full", "")}",{parsed.get("sentiment", "Unknown")},{parsed.get("confidence", 0):.1f}%,{parsed.get("pos_prob", 0):.1f}%,{parsed.get("neu_prob", 0):.1f}%,{parsed.get("neg_prob", 0):.1f}%,{parsed.get("date", "")}\n'
                 saved_count += 1
-        except Exception as e:
-            print(f"Error reading {file}: {e}")
+        except:
+            pass
     
     if saved_count == 0:
-        return "No valid data found in flagged files.", None
+        return "No valid data found."
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"flagged_all_export_{timestamp}.csv"
     
-    return f"✅ Downloaded all {saved_count} flagged files!", gr.File(
-        value=output.getvalue().encode('utf-8'),
+    return gr.File(
+        value=csv_data.encode('utf-8'),
         filename=filename,
-        file_type="csv"
+        visible=True
     )
 
 def refresh_flagged():
@@ -1660,6 +1612,22 @@ with gr.Blocks(title="Cinema Sentiment Analysis", css=custom_css) as demo:
                         flag_all_btn = gr.Button("Flag All", variant="secondary", scale=1)
                         flag_low_btn = gr.Button("Flag Low Conf", variant="secondary", scale=1)
                     analyzed_status = gr.Textbox(label="", lines=1, placeholder="Check boxes below the table, then use the buttons above", interactive=False, max_lines=1, elem_classes="status-textbox")
+
+                    # Add this AFTER analyzed_status (in the UI section)
+                    download_output = gr.File(label="Download CSV", visible=True)
+                    
+                    # Update button clicks:
+                    save_selected_btn.click(
+                        fn=save_selected_results_from_table,
+                        inputs=[analyzed_checkbox],
+                        outputs=[download_output]  # ← Only one output
+                    )
+                    
+                    save_all_btn.click(
+                        fn=save_all_results,
+                        outputs=[download_output]  # ← Only one output
+                    )
+                    
                     # Download output for save buttons
                     download_output = gr.File(label="Download", visible=True)
 
@@ -1689,6 +1657,22 @@ with gr.Blocks(title="Cinema Sentiment Analysis", css=custom_css) as demo:
                     with gr.Row():
                         save_flagged_all_btn = gr.Button("Save All", variant="secondary", scale=1)
                     flagged_status = gr.Textbox(label="", lines=1, placeholder="Check boxes below the table, then use the buttons above", interactive=False, max_lines=1, elem_classes="status-textbox")
+                    
+                    # Add this AFTER flagged_status
+                    flagged_download_output = gr.File(label="Download CSV", visible=True)
+                    
+                    # Update button clicks:
+                    save_flagged_selected_btn.click(
+                        fn=save_flagged_selected,
+                        inputs=[flagged_checkbox],
+                        outputs=[flagged_download_output]  # ← Only one output
+                    )
+                    
+                    save_flagged_all_btn.click(
+                        fn=save_flagged_all,
+                        outputs=[flagged_download_output]  # ← Only one output
+                    )
+                    
                     # Download output for flagged save buttons
                     flagged_download_output = gr.File(label="Download", visible=True)
 
