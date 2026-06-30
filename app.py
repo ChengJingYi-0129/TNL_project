@@ -660,7 +660,7 @@ def create_all_charts():
         yaxis=dict(title_font=dict(color=text_color), tickfont=dict(color=text_color), gridcolor=grid_color)
     )
 
-    # Sentiment Trend
+    # Sentiment Trend Over Time - Grouped by Month/Year
     trend_fig = go.Figure()
     if 'timestamp' in df.columns:
         date_df = df[df['timestamp'] != 'Not specified'].copy()
@@ -668,28 +668,53 @@ def create_all_charts():
             date_df['date'] = pd.to_datetime(date_df['timestamp'], errors='coerce')
             date_df = date_df.dropna(subset=['date'])
             if not date_df.empty:
-                daily_counts = date_df.groupby([date_df['date'].dt.date, 'sentiment']).size().unstack(fill_value=0)
-                daily_totals = daily_counts.sum(axis=1)
-                for sentiment in ['Positive', 'Neutral', 'Negative']:
-                    if sentiment in daily_counts.columns:
-                        pct = (daily_counts[sentiment] / daily_totals * 100).fillna(0)
-                        trend_fig.add_trace(go.Scatter(
-                            x=daily_totals.index,
-                            y=pct,
-                            mode='lines+markers',
-                            name=sentiment,
-                            line=dict(color=colors.get(sentiment, '#95a5a6'), width=3),
-                            marker=dict(size=6)
-                        ))
+                # Group by Year-Month (e.g., "2025-06")
+                date_df['year_month'] = date_df['date'].dt.to_period('M')
+                
+                # Count sentiments per month
+                monthly_counts = date_df.groupby(['year_month', 'sentiment']).size().unstack(fill_value=0)
+                
+                # Convert period to datetime for plotting
+                monthly_counts.index = monthly_counts.index.to_timestamp()
+                
+                if not monthly_counts.empty:
+                    for sentiment in ['Positive', 'Neutral', 'Negative']:
+                        if sentiment in monthly_counts.columns:
+                            trend_fig.add_trace(go.Bar(
+                                x=monthly_counts.index,
+                                y=monthly_counts[sentiment],
+                                name=sentiment,
+                                marker_color=colors.get(sentiment, '#95a5a6'),
+                                text=monthly_counts[sentiment],
+                                textposition='inside',
+                                textfont=dict(color='white', size=11),
+                                hovertemplate='%{x|%B %Y}<br>%{y} %{text}<extra></extra>'
+                            ))
+    
     trend_fig.update_layout(
-        height=300,
-        title=dict(text="Sentiment Trend Over Time", font=dict(color=text_color, size=14)),
-        xaxis=dict(title="Date", title_font=dict(color=text_color), tickfont=dict(color=text_color), gridcolor=grid_color),
-        yaxis=dict(title="Percentage %", title_font=dict(color=text_color), tickfont=dict(color=text_color), range=[0, 100], gridcolor=grid_color),
+        height=350,
+        title=dict(text="Sentiment Trend Over Time (Monthly)", font=dict(color=text_color, size=14)),
+        xaxis=dict(
+            title="Month", 
+            title_font=dict(color=text_color), 
+            tickfont=dict(color=text_color), 
+            gridcolor=grid_color,
+            tickangle=-45,
+            tickformat='%b %Y'  # Show as "Jan 2025"
+        ),
+        yaxis=dict(
+            title="Number of Reviews", 
+            title_font=dict(color=text_color), 
+            tickfont=dict(color=text_color), 
+            gridcolor=grid_color,
+            rangemode='tozero'
+        ),
+        barmode='stack',  # Stacked bars
         plot_bgcolor=bg_color,
         paper_bgcolor=bg_color,
         font=dict(color=text_color),
-        legend=dict(font=dict(color=text_color))
+        legend=dict(font=dict(color=text_color), orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
+        hovermode='x unified'
     )
 
     # Time of Day
