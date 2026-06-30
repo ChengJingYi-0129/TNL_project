@@ -404,14 +404,21 @@ def get_analyzed_results_display():
 
 def get_flagged_display_table():
     files = get_flagged_files()
+    
     if not files:
         return "No flagged data yet.", []
+    
     parsed_files = []
     for file in files:
         filepath = os.path.join(FLAG_PATH, file)
         parsed = parse_flagged_file(filepath)
         if parsed:
             parsed_files.append(parsed)
+    
+    # If no parsed files, return empty
+    if not parsed_files:
+        return "No flagged data yet.", []
+    
     html = """
     <style>
         .flagged-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -444,6 +451,7 @@ def get_flagged_display_table():
             </thead>
             <tbody>
     """
+    
     for i, parsed in enumerate(parsed_files, 1):
         sentiment = parsed.get('sentiment', 'Unknown')
         emoji = get_sentiment_emoji(sentiment)
@@ -454,8 +462,10 @@ def get_flagged_display_table():
         date_display = parsed.get('date', 'Unknown')
         review = parsed.get('review_preview', '')
         review_full = parsed.get('review_full', '')
+        
         sent_class = 'sentiment-pos' if sentiment == 'Positive' else 'sentiment-neu' if sentiment == 'Neutral' else 'sentiment-neg'
         conf_class = 'conf-high' if confidence >= 70 else 'conf-low'
+        
         html += f"""
             <tr>
                 <td style="color:#000000 !important; text-align:center;">{i}</td>
@@ -468,18 +478,23 @@ def get_flagged_display_table():
                 <td class="review-preview" title="{review_full}" style="color:#000000 !important;">{review}</td>
             </tr>
         """
+    
     html += """
             </tbody>
         </table>
     </div>
     """
+    
     html += f"<br><span class='table-total'>Total: {len(parsed_files)} flagged files</span>"
+    
+    # Create checkbox choices from ALL parsed files
     checkbox_choices = []
     for i, parsed in enumerate(parsed_files, 1):
         sentiment = parsed.get('sentiment', 'Unknown')
         date_display = parsed.get('date', 'Unknown')
         short_date = date_display[:10] if len(date_display) >= 10 else date_display
         checkbox_choices.append(f"[{i}] {sentiment} - {short_date}")
+    
     return html, checkbox_choices
 
 def create_empty_chart():
@@ -506,6 +521,7 @@ def create_visualization_charts():
 def get_flagged_files():
     if not os.path.exists(FLAG_PATH):
         return []
+    # Get ALL CSV files in the folder (no filtering)
     files = [f for f in os.listdir(FLAG_PATH) if f.endswith('.csv')]
     return sorted(files)
 
@@ -554,9 +570,11 @@ def parse_flagged_file(filepath):
 def get_readable_flagged_list():
     global analyzed_label_to_filename
     analyzed_label_to_filename = {}
+    
     files = get_flagged_files()
     if not files:
         return []
+    
     readable_list = []
     for file in files:
         filepath = os.path.join(FLAG_PATH, file)
@@ -569,6 +587,7 @@ def get_readable_flagged_list():
         else:
             readable_list.append(file)
             analyzed_label_to_filename[file] = file
+    
     return readable_list
 
 def get_existing_flagged_reviews():
@@ -1017,19 +1036,23 @@ def flag_low_confidence(selected_labels):
 def delete_flagged_results(selected_labels):
     if not selected_labels:
         return "No files selected.", [], ""
+    
     selected_files = []
     for label in selected_labels:
         if label in analyzed_label_to_filename:
             selected_files.append(analyzed_label_to_filename[label])
         else:
+            # Try to match by index
             match = re.search(r'\[(\d+)\]', label)
             if match:
                 idx = int(match.group(1)) - 1
                 files = get_flagged_files()
                 if 0 <= idx < len(files):
                     selected_files.append(files[idx])
+    
     if not selected_files:
         return "No valid files selected.", [], ""
+    
     deleted_count = 0
     for file in selected_files:
         filepath = os.path.join(FLAG_PATH, file)
@@ -1039,6 +1062,7 @@ def delete_flagged_results(selected_labels):
                 deleted_count += 1
         except:
             pass
+    
     display, checkbox_choices = get_flagged_display_table()
     return f"Deleted {deleted_count} flagged file(s).", gr.update(choices=checkbox_choices, value=[]), display
 
@@ -1188,23 +1212,30 @@ def filter_analyzed_results(sentiment_filter):
 
 def filter_flagged_results(sentiment_filter):
     global filtered_flagged_cache
+    
     files = get_flagged_files()
     if not files:
         return "No flagged data yet.", []
+    
     parsed_files = []
     for file in files:
         filepath = os.path.join(FLAG_PATH, file)
         parsed = parse_flagged_file(filepath)
         if parsed:
             parsed_files.append(parsed)
+    
     if not parsed_files:
         return "No flagged data yet.", []
+    
     if sentiment_filter == "All":
         filtered_flagged_cache = parsed_files
     else:
         filtered_flagged_cache = [f for f in parsed_files if f.get('sentiment') == sentiment_filter]
+    
     if not filtered_flagged_cache:
         return f"No {sentiment_filter} flagged files found.", []
+    
+    # Build HTML table for filtered results
     html = """
     <style>
         .flagged-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -1237,6 +1268,7 @@ def filter_flagged_results(sentiment_filter):
             </thead>
             <tbody>
     """
+    
     for i, parsed in enumerate(filtered_flagged_cache, 1):
         sentiment = parsed.get('sentiment', 'Unknown')
         emoji = get_sentiment_emoji(sentiment)
@@ -1247,8 +1279,10 @@ def filter_flagged_results(sentiment_filter):
         date_display = parsed.get('date', 'Unknown')
         review = parsed.get('review_preview', '')
         review_full = parsed.get('review_full', '')
+        
         sent_class = 'sentiment-pos' if sentiment == 'Positive' else 'sentiment-neu' if sentiment == 'Neutral' else 'sentiment-neg'
         conf_class = 'conf-high' if confidence >= 70 else 'conf-low'
+        
         html += f"""
             <tr>
                 <td style="color:#000000 !important; text-align:center;">{i}</td>
@@ -1261,18 +1295,22 @@ def filter_flagged_results(sentiment_filter):
                 <td class="review-preview" title="{review_full}" style="color:#000000 !important;">{review}</td>
             </tr>
         """
+    
     html += """
             </tbody>
         </table>
     </div>
     """
+    
     html += f"<br><span class='table-total'>Total: {len(filtered_flagged_cache)} flagged files (filtered: {sentiment_filter})</span>"
+    
     checkbox_choices = []
     for i, parsed in enumerate(filtered_flagged_cache, 1):
         sentiment = parsed.get('sentiment', 'Unknown')
         date_display = parsed.get('date', 'Unknown')
         short_date = date_display[:10] if len(date_display) >= 10 else date_display
         checkbox_choices.append(f"[{i}] {sentiment} - {short_date}")
+    
     return html, gr.update(choices=checkbox_choices, value=checkbox_choices)
 
 # ============ CSV IMPORT FUNCTIONS ============
