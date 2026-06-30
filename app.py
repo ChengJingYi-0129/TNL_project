@@ -1655,7 +1655,7 @@ with gr.Blocks(title="Cinema Sentiment Analysis", css=custom_css) as demo:
                         flag_low_btn = gr.Button("Flag Low Conf", variant="secondary", scale=1)
                     analyzed_status = gr.Textbox(label="", lines=1, placeholder="Check boxes below the table, then use the buttons above", interactive=False, max_lines=1, elem_classes="status-textbox")
                     # Download output for save buttons
-                    download_output = gr.File(label="", visible=True)
+                    download_output = gr.File(label="Download", visible=True)
 
         # ============ TAB 4: FLAGGED DATA ============
         with gr.TabItem("Flagged Data", id="tab_flagged"):
@@ -1684,7 +1684,7 @@ with gr.Blocks(title="Cinema Sentiment Analysis", css=custom_css) as demo:
                         save_flagged_all_btn = gr.Button("Save All", variant="secondary", scale=1)
                     flagged_status = gr.Textbox(label="", lines=1, placeholder="Check boxes below the table, then use the buttons above", interactive=False, max_lines=1, elem_classes="status-textbox")
                     # Download output for flagged save buttons
-                    flagged_download_output = gr.File(label="", visible=True)
+                    flagged_download_output = gr.File(label="Download", visible=True)
 
         # ============ TAB 5: SUMMARY & VISUALIZATIONS ============
         with gr.TabItem("Summary & Visualizations", id="tab_summary"):
