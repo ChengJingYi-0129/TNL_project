@@ -1074,9 +1074,10 @@ def get_flagged_display():
     return html
 
 def refresh_flagged():
-    """Refresh flagged data display"""
+    """Refresh flagged data display - returns updated table and checkbox"""
     display, checkbox_choices = get_flagged_display_table()
-    return gr.update(choices=checkbox_choices, value=[]), display
+    # Return both the table HTML and the checkbox update
+    return display, gr.update(choices=checkbox_choices, value=[])
 
 # ============ FILTER FUNCTIONS ============
 
@@ -1243,7 +1244,7 @@ def filter_flagged_results(sentiment_filter):
         short_date = date_display[:10] if len(date_display) >= 10 else date_display
         checkbox_choices.append(f"[{i}] {sentiment} - {short_date}")
     
-    return html, gr.update(choices=checkbox_choices, value=checkbox_choices)
+    return html, gr.update(choices=checkbox_choices, value=[])
 
 # ============ SAVE FLAGGED FUNCTIONS ============
 
@@ -2226,22 +2227,33 @@ with gr.Blocks(title="Cinema Sentiment Analysis", css=custom_css) as demo:
         outputs=[download_output]
     )
 
-    flag_selected_btn.click(
-        fn=flag_selected_from_table,
-        inputs=[analyzed_checkbox],
-        outputs=[analyzed_status]
-    ).then(fn=refresh_flagged, outputs=[flagged_checkbox, flagged_table])
+# Replace the flag button event handlers with these:
 
-    flag_all_btn.click(
-        fn=flag_all_from_table,
-        outputs=[analyzed_status]
-    ).then(fn=refresh_flagged, outputs=[flagged_checkbox, flagged_table])
+flag_selected_btn.click(
+    fn=flag_selected_from_table,
+    inputs=[analyzed_checkbox],
+    outputs=[analyzed_status]
+).then(
+    fn=refresh_flagged,
+    outputs=[flagged_table, flagged_checkbox]
+)
 
-    flag_low_btn.click(
-        fn=flag_low_confidence,
-        inputs=[analyzed_checkbox],
-        outputs=[analyzed_status]
-    ).then(fn=refresh_flagged, outputs=[flagged_checkbox, flagged_table])
+flag_all_btn.click(
+    fn=flag_all_from_table,
+    outputs=[analyzed_status]
+).then(
+    fn=refresh_flagged,
+    outputs=[flagged_table, flagged_checkbox]
+)
+
+flag_low_btn.click(
+    fn=flag_low_confidence,
+    inputs=[analyzed_checkbox],
+    outputs=[analyzed_status]
+).then(
+    fn=refresh_flagged,
+    outputs=[flagged_table, flagged_checkbox]
+)
 
     flagged_filter_dropdown.change(
         fn=filter_flagged_results,
