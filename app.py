@@ -674,7 +674,7 @@ def delete_all_analyzed():
     filtered_results_cache = []
     return f"Deleted all {count} results."
 
-# ============ SAVE FUNCTIONS (Now Download CSV) ============
+# ============ SAVE FUNCTIONS (Fixed) ============
 
 def save_selected_results_from_table(selected_labels):
     if not selected_labels or not filtered_results_cache:
@@ -692,6 +692,8 @@ def save_selected_results_from_table(selected_labels):
         return "No valid results selected.", None
     
     # Create CSV in memory
+    import io
+    import csv
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(['Review', 'Sentiment', 'Confidence', 'Positive%', 'Neutral%', 'Negative%', 'Date/Time'])
@@ -710,16 +712,17 @@ def save_selected_results_from_table(selected_labels):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"exported_results_{timestamp}.csv"
     
-    return f"✅ Downloaded {len(selected_results)} results!", gr.File(
+    return f"Downloaded {len(selected_results)} results!", gr.File(
         value=output.getvalue().encode('utf-8'),
-        filename=filename,
-        file_type="csv"
+        filename=filename
     )
 
 def save_all_results():
     if not all_results:
         return "No results to save.", None
     
+    import io
+    import csv
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(['Review', 'Sentiment', 'Confidence', 'Positive%', 'Neutral%', 'Negative%', 'Date/Time'])
@@ -738,10 +741,9 @@ def save_all_results():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"exported_all_results_{timestamp}.csv"
     
-    return f"✅ Downloaded all {len(all_results)} results!", gr.File(
+    return f"Downloaded all {len(all_results)} results!", gr.File(
         value=output.getvalue().encode('utf-8'),
-        filename=filename,
-        file_type="csv"
+        filename=filename
     )
 
 # ============ FLAG FUNCTIONS (Save to VM) ============
