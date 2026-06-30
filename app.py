@@ -400,7 +400,7 @@ def get_analyzed_results_display():
         checkbox_choices.append(f"[{i}] {res.get('sentiment', 'Unknown')} - {date_part}")
     return html, checkbox_choices
 
-## ============ FLAGGED DATA FUNCTIONS (FIXED - MATCHES ANALYZED DISPLAY) ============
+# ============ FLAGGED DATA FUNCTIONS (FIXED) ============
 
 def get_flagged_files():
     if not os.path.exists(FLAG_PATH):
@@ -409,53 +409,36 @@ def get_flagged_files():
     return sorted(files)
 
 def parse_flagged_file(filepath):
-    """Parse a flagged CSV file - reads the CSV properly like a DataFrame"""
     try:
-        # Read the CSV file
         df = pd.read_csv(filepath, encoding='utf-8')
-        
         if df.empty:
             return None
-        
-        # Get the first row (each file has one review)
         row = df.iloc[0]
-        
-        # Now extract data - just like how we store in all_results
         review_full = str(row.get('Review', ''))
         if review_full == 'nan':
             review_full = ''
-        
         review_preview = review_full[:50] + "..." if len(review_full) > 50 else review_full
-        
         sentiment = str(row.get('Sentiment', 'Unknown'))
         if sentiment == 'nan':
             sentiment = 'Unknown'
-        
         confidence_str = str(row.get('Confidence', '0'))
         confidence = float(confidence_str.replace('%', '')) if confidence_str != 'nan' else 0
-        
-        # Parse probabilities
         def parse_prob(val):
             val_str = str(val)
             if val_str == 'nan':
                 return 0
             return float(val_str.replace('%', ''))
-        
         pos_prob = parse_prob(row.get('Positive%', 0))
         neu_prob = parse_prob(row.get('Neutral%', 0))
         neg_prob = parse_prob(row.get('Negative%', 0))
-        
         timestamp = str(row.get('Timestamp', ''))
         if timestamp == 'nan':
             timestamp = ''
-        
-        # Extract date
         date_str = ''
         if timestamp:
             date_match = re.search(r'(\d{4}-\d{2}-\d{2})', timestamp)
             if date_match:
                 date_str = date_match.group(1)
-        
         return {
             'sentiment': sentiment,
             'confidence': confidence,
@@ -468,30 +451,22 @@ def parse_flagged_file(filepath):
             'review_full': review_full,
             'filename': os.path.basename(filepath)
         }
-        
     except Exception as e:
         print(f"Error parsing {filepath}: {e}")
         return None
 
 def get_flagged_display_table():
-    """Display flagged data - EXACTLY like analyzed results display"""
     files = get_flagged_files()
-    
     if not files:
         return "No flagged data yet.", []
-    
-    # Parse all flagged files into a list (like all_results)
     flagged_data = []
     for file in files:
         filepath = os.path.join(FLAG_PATH, file)
         parsed = parse_flagged_file(filepath)
         if parsed:
             flagged_data.append(parsed)
-    
     if not flagged_data:
         return "No flagged data could be parsed.", []
-    
-    # Build HTML table - EXACT SAME STYLE as analyzed results
     html = """
     <style>
         .flagged-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -524,7 +499,6 @@ def get_flagged_display_table():
             </thead>
             <tbody>
     """
-    
     for i, parsed in enumerate(flagged_data, 1):
         sentiment = parsed.get('sentiment', 'Unknown')
         emoji = get_sentiment_emoji(sentiment)
@@ -535,10 +509,8 @@ def get_flagged_display_table():
         date_display = parsed.get('date', 'Unknown')
         review = parsed.get('review_preview', '')
         review_full = parsed.get('review_full', '')
-        
         sent_class = 'sentiment-pos' if sentiment == 'Positive' else 'sentiment-neu' if sentiment == 'Neutral' else 'sentiment-neg'
         conf_class = 'conf-high' if confidence >= 70 else 'conf-low'
-        
         html += f"""
             <tr>
                 <td style="color:#000000 !important; text-align:center;">{i}</td>
@@ -551,30 +523,23 @@ def get_flagged_display_table():
                 <td class="review-preview" title="{review_full}" style="color:#000000 !important;">{review}</td>
             </tr>
         """
-    
     html += """
             </tbody>
         </table>
     </div>
     """
-    
     html += f"<br><span class='table-total'>Total: {len(flagged_data)} flagged files</span>"
-    
-    # Create checkbox choices - EXACT same format as analyzed
     checkbox_choices = []
     for i, parsed in enumerate(flagged_data, 1):
         sentiment = parsed.get('sentiment', 'Unknown')
         date_display = parsed.get('date', 'Unknown')
         short_date = date_display[:10] if len(date_display) >= 10 else date_display
         checkbox_choices.append(f"[{i}] {sentiment} - {short_date}")
-    
     return html, checkbox_choices
 
 def get_existing_flagged_reviews():
-    """Get existing flagged reviews for duplicate checking"""
     existing_reviews = {}
     files = get_flagged_files()
-    
     for file in files:
         filepath = os.path.join(FLAG_PATH, file)
         parsed = parse_flagged_file(filepath)
@@ -584,43 +549,31 @@ def get_existing_flagged_reviews():
             if review_text:
                 key = (review_text, date_text)
                 existing_reviews[key] = file
-    
     return existing_reviews
 
 def refresh_flagged():
-    """Refresh flagged data display"""
     display, checkbox_choices = get_flagged_display_table()
     return display, gr.update(choices=checkbox_choices, value=[])
 
 def filter_flagged_results(sentiment_filter):
-    """Filter flagged results - EXACTLY like filter_analyzed_results"""
     global filtered_flagged_cache
-    
     files = get_flagged_files()
     if not files:
         return "No flagged data yet.", []
-    
-    # Parse all flagged files
     flagged_data = []
     for file in files:
         filepath = os.path.join(FLAG_PATH, file)
         parsed = parse_flagged_file(filepath)
         if parsed:
             flagged_data.append(parsed)
-    
     if not flagged_data:
         return "No flagged data yet.", []
-    
-    # Filter - EXACT same logic as analyzed filter
     if sentiment_filter == "All":
         filtered_flagged_cache = flagged_data
     else:
         filtered_flagged_cache = [f for f in flagged_data if f.get('sentiment') == sentiment_filter]
-    
     if not filtered_flagged_cache:
         return f"No {sentiment_filter} flagged files found.", []
-    
-    # Build HTML - EXACT same style
     html = """
     <style>
         .flagged-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -653,7 +606,6 @@ def filter_flagged_results(sentiment_filter):
             </thead>
             <tbody>
     """
-    
     for i, parsed in enumerate(filtered_flagged_cache, 1):
         sentiment = parsed.get('sentiment', 'Unknown')
         emoji = get_sentiment_emoji(sentiment)
@@ -664,10 +616,8 @@ def filter_flagged_results(sentiment_filter):
         date_display = parsed.get('date', 'Unknown')
         review = parsed.get('review_preview', '')
         review_full = parsed.get('review_full', '')
-        
         sent_class = 'sentiment-pos' if sentiment == 'Positive' else 'sentiment-neu' if sentiment == 'Neutral' else 'sentiment-neg'
         conf_class = 'conf-high' if confidence >= 70 else 'conf-low'
-        
         html += f"""
             <tr>
                 <td style="color:#000000 !important; text-align:center;">{i}</td>
@@ -680,22 +630,18 @@ def filter_flagged_results(sentiment_filter):
                 <td class="review-preview" title="{review_full}" style="color:#000000 !important;">{review}</td>
             </tr>
         """
-    
     html += """
             </tbody>
         </table>
     </div>
     """
-    
     html += f"<br><span class='table-total'>Total: {len(filtered_flagged_cache)} flagged files (filtered: {sentiment_filter})</span>"
-    
     checkbox_choices = []
     for i, parsed in enumerate(filtered_flagged_cache, 1):
         sentiment = parsed.get('sentiment', 'Unknown')
         date_display = parsed.get('date', 'Unknown')
         short_date = date_display[:10] if len(date_display) >= 10 else date_display
         checkbox_choices.append(f"[{i}] {sentiment} - {short_date}")
-    
     return html, gr.update(choices=checkbox_choices, value=checkbox_choices)
 
 # ============ FLAG FUNCTIONS ============
@@ -703,7 +649,6 @@ def filter_flagged_results(sentiment_filter):
 def flag_selected_from_table(selected_labels):
     if not selected_labels or not filtered_results_cache:
         return "No results selected."
-    
     selected_results = []
     for label in selected_labels:
         match = re.search(r'\[(\d+)\]', label)
@@ -711,54 +656,35 @@ def flag_selected_from_table(selected_labels):
             idx = int(match.group(1)) - 1
             if 0 <= idx < len(filtered_results_cache):
                 selected_results.append(filtered_results_cache[idx])
-    
     if not selected_results:
         return "No valid results selected."
-    
     existing_reviews = get_existing_flagged_reviews()
     flagged_count = 0
     skipped_count = 0
-    
     for res in selected_results:
         review_text = res.get('review', '').strip()
         timestamp = res.get('timestamp', 'Not specified')
-        
         if not review_text:
             continue
-        
         date_only = 'No date'
         if timestamp and timestamp != 'Not specified':
             date_only = timestamp[:10] if len(timestamp) >= 10 else timestamp
-        
         key = (review_text, date_only)
-        
         if key in existing_reviews:
             skipped_count += 1
             continue
-        
         timestamp_now = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
         filename = f"flag_{timestamp_now}.csv"
         filepath = os.path.join(FLAG_PATH, filename)
-        
         try:
             with open(filepath, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow(['Review', 'Result', 'Timestamp', 'Sentiment', 'Confidence', 'Positive%', 'Neutral%', 'Negative%'])
-                writer.writerow([
-                    res.get('review', ''),
-                    res.get('full_result', ''),
-                    res.get('timestamp', datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-                    res.get('sentiment', 'Unknown'),
-                    f"{res.get('confidence', 0):.1f}%",
-                    f"{res.get('pos_prob', 0):.1f}%",
-                    f"{res.get('neu_prob', 0):.1f}%",
-                    f"{res.get('neg_prob', 0):.1f}%"
-                ])
+                writer.writerow([res.get('review', ''), res.get('full_result', ''), res.get('timestamp', datetime.now().strftime("%Y-%m-%d %H:%M:%S")), res.get('sentiment', 'Unknown'), f"{res.get('confidence', 0):.1f}%", f"{res.get('pos_prob', 0):.1f}%", f"{res.get('neu_prob', 0):.1f}%", f"{res.get('neg_prob', 0):.1f}%"])
             flagged_count += 1
             existing_reviews[key] = filename
         except Exception as e:
             print(f"Error flagging review: {e}")
-    
     if flagged_count == 0 and skipped_count > 0:
         return f"Flagged 0 reviews, {skipped_count} skipped (already exist)"
     elif flagged_count > 0 and skipped_count > 0:
@@ -769,51 +695,33 @@ def flag_selected_from_table(selected_labels):
 def flag_all_from_table():
     if not all_results:
         return "No results to flag."
-    
     existing_reviews = get_existing_flagged_reviews()
     flagged_count = 0
     skipped_count = 0
-    
     for res in all_results:
         review_text = res.get('review', '').strip()
         timestamp = res.get('timestamp', 'Not specified')
-        
         if not review_text:
             continue
-        
         date_only = 'No date'
         if timestamp and timestamp != 'Not specified':
             date_only = timestamp[:10] if len(timestamp) >= 10 else timestamp
-        
         key = (review_text, date_only)
-        
         if key in existing_reviews:
             skipped_count += 1
             continue
-        
         timestamp_now = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
         filename = f"flag_{timestamp_now}.csv"
         filepath = os.path.join(FLAG_PATH, filename)
-        
         try:
             with open(filepath, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow(['Review', 'Result', 'Timestamp', 'Sentiment', 'Confidence', 'Positive%', 'Neutral%', 'Negative%'])
-                writer.writerow([
-                    res.get('review', ''),
-                    res.get('full_result', ''),
-                    res.get('timestamp', datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-                    res.get('sentiment', 'Unknown'),
-                    f"{res.get('confidence', 0):.1f}%",
-                    f"{res.get('pos_prob', 0):.1f}%",
-                    f"{res.get('neu_prob', 0):.1f}%",
-                    f"{res.get('neg_prob', 0):.1f}%"
-                ])
+                writer.writerow([res.get('review', ''), res.get('full_result', ''), res.get('timestamp', datetime.now().strftime("%Y-%m-%d %H:%M:%S")), res.get('sentiment', 'Unknown'), f"{res.get('confidence', 0):.1f}%", f"{res.get('pos_prob', 0):.1f}%", f"{res.get('neu_prob', 0):.1f}%", f"{res.get('neg_prob', 0):.1f}%"])
             flagged_count += 1
             existing_reviews[key] = filename
         except Exception as e:
             print(f"Error flagging review: {e}")
-    
     if flagged_count == 0 and skipped_count > 0:
         return f"Flagged 0 reviews, {skipped_count} skipped (already exist)"
     elif flagged_count > 0 and skipped_count > 0:
@@ -826,71 +734,48 @@ def flag_all_from_table():
 def flag_low_confidence(selected_labels):
     if not selected_labels or not filtered_results_cache:
         return "No results selected."
-    
     THRESHOLD = 70
     selected_results = []
-    
     for label in selected_labels:
         match = re.search(r'\[(\d+)\]', label)
         if match:
             idx = int(match.group(1)) - 1
             if 0 <= idx < len(filtered_results_cache):
                 selected_results.append(filtered_results_cache[idx])
-    
     if not selected_results:
         return "No valid results selected."
-    
     existing_reviews = get_existing_flagged_reviews()
     flagged_count = 0
     skipped_count = 0
     low_conf_count = 0
-    
     for res in selected_results:
         review_text = res.get('review', '').strip()
         timestamp = res.get('timestamp', 'Not specified')
         confidence = res.get('confidence', 0)
-        
         if not review_text:
             continue
-        
         if confidence >= THRESHOLD:
             continue
-        
         low_conf_count += 1
-        
         date_only = 'No date'
         if timestamp and timestamp != 'Not specified':
             date_only = timestamp[:10] if len(timestamp) >= 10 else timestamp
-        
         key = (review_text, date_only)
-        
         if key in existing_reviews:
             skipped_count += 1
             continue
-        
         timestamp_now = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
         filename = f"flag_{timestamp_now}.csv"
         filepath = os.path.join(FLAG_PATH, filename)
-        
         try:
             with open(filepath, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow(['Review', 'Result', 'Timestamp', 'Sentiment', 'Confidence', 'Positive%', 'Neutral%', 'Negative%'])
-                writer.writerow([
-                    res.get('review', ''),
-                    res.get('full_result', ''),
-                    res.get('timestamp', datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-                    res.get('sentiment', 'Unknown'),
-                    f"{res.get('confidence', 0):.1f}%",
-                    f"{res.get('pos_prob', 0):.1f}%",
-                    f"{res.get('neu_prob', 0):.1f}%",
-                    f"{res.get('neg_prob', 0):.1f}%"
-                ])
+                writer.writerow([res.get('review', ''), res.get('full_result', ''), res.get('timestamp', datetime.now().strftime("%Y-%m-%d %H:%M:%S")), res.get('sentiment', 'Unknown'), f"{res.get('confidence', 0):.1f}%", f"{res.get('pos_prob', 0):.1f}%", f"{res.get('neu_prob', 0):.1f}%", f"{res.get('neg_prob', 0):.1f}%"])
             flagged_count += 1
             existing_reviews[key] = filename
         except Exception as e:
             print(f"Error flagging review: {e}")
-    
     if low_conf_count == 0:
         return f"No low confidence reviews in selection (threshold: {THRESHOLD}%)"
     elif flagged_count == 0 and skipped_count > 0:
@@ -900,235 +785,11 @@ def flag_low_confidence(selected_labels):
     else:
         return f"Flagged {flagged_count} low confidence reviews (threshold: {THRESHOLD}%)"
 
-# ============ FILTER FUNCTIONS ============
-
-def filter_flagged_results(sentiment_filter):
-    global filtered_flagged_cache
-    
-    files = get_flagged_files()
-    if not files:
-        return "No flagged data yet.", []
-    
-    parsed_files = []
-    for file in files:
-        filepath = os.path.join(FLAG_PATH, file)
-        parsed = parse_flagged_file(filepath)
-        if parsed:
-            parsed_files.append(parsed)
-    
-    if not parsed_files:
-        return "No flagged data yet.", []
-    
-    if sentiment_filter == "All":
-        filtered_flagged_cache = parsed_files
-    else:
-        filtered_flagged_cache = [f for f in parsed_files if f.get('sentiment') == sentiment_filter]
-    
-    if not filtered_flagged_cache:
-        return f"No {sentiment_filter} flagged files found.", []
-    
-    # Build HTML table for filtered results
-    html = """
-    <style>
-        .flagged-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        .flagged-table th { background: #D5C6E0; color: #000000 !important; padding: 10px; text-align: left; font-weight: 700; border: 1px solid #2A0800 !important; }
-        .flagged-table td { padding: 8px 10px; border: 1px solid #2A0800 !important; vertical-align: top; background: #ffffff; }
-        .flagged-table tr:hover td { background: #f5f0f7 !important; }
-        .flagged-container { max-height: 400px; overflow-y: auto; border: 2px solid #2A0800 !important; border-radius: 8px; background: #ffffff; }
-        .table-total { color: #ffffff !important; font-weight: 700; }
-        .sentiment-pos { color: #2ecc71 !important; font-weight: 700; }
-        .sentiment-neu { color: #f1c40f !important; font-weight: 700; }
-        .sentiment-neg { color: #e74c3c !important; font-weight: 700; }
-        .conf-high { color: #2ecc71 !important; font-weight: 700; }
-        .conf-low { color: #e74c3c !important; font-weight: 700; }
-        .review-preview { max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #000000 !important; }
-        .review-preview:hover { white-space: normal; overflow: visible; background: #ffffff; position: relative; z-index: 20; box-shadow: 0 2px 8px rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 4px; border: 1px solid #2A0800; }
-    </style>
-    <div class="flagged-container">
-        <table class="flagged-table">
-            <thead>
-                <tr>
-                    <th style="width:40px;">#</th>
-                    <th style="width:100px;">Sentiment</th>
-                    <th style="width:100px;">Confidence</th>
-                    <th style="width:80px;">Positive</th>
-                    <th style="width:80px;">Neutral</th>
-                    <th style="width:80px;">Negative</th>
-                    <th style="width:180px;">Date/Time</th>
-                    <th>Review</th>
-                </tr>
-            </thead>
-            <tbody>
-    """
-    
-    for i, parsed in enumerate(filtered_flagged_cache, 1):
-        sentiment = parsed.get('sentiment', 'Unknown')
-        emoji = get_sentiment_emoji(sentiment)
-        confidence = parsed.get('confidence', 0)
-        pos_prob = parsed.get('pos_prob', 0)
-        neu_prob = parsed.get('neu_prob', 0)
-        neg_prob = parsed.get('neg_prob', 0)
-        date_display = parsed.get('date', 'Unknown')
-        review = parsed.get('review_preview', '')
-        review_full = parsed.get('review_full', '')
-        
-        sent_class = 'sentiment-pos' if sentiment == 'Positive' else 'sentiment-neu' if sentiment == 'Neutral' else 'sentiment-neg'
-        conf_class = 'conf-high' if confidence >= 70 else 'conf-low'
-        
-        html += f"""
-            <tr>
-                <td style="color:#000000 !important; text-align:center;">{i}</td>
-                <td class="{sent_class}">{emoji} {sentiment}</td>
-                <td class="{conf_class}">{confidence:.1f}%</td>
-                <td style="color:#000000 !important;">{pos_prob:.1f}%</td>
-                <td style="color:#000000 !important;">{neu_prob:.1f}%</td>
-                <td style="color:#000000 !important;">{neg_prob:.1f}%</td>
-                <td style="color:#000000 !important;">{date_display}</td>
-                <td class="review-preview" title="{review_full}" style="color:#000000 !important;">{review}</td>
-            </tr>
-        """
-    
-    html += """
-            </tbody>
-        </table>
-    </div>
-    """
-    
-    html += f"<br><span class='table-total'>Total: {len(filtered_flagged_cache)} flagged files (filtered: {sentiment_filter})</span>"
-    
-    checkbox_choices = []
-    for i, parsed in enumerate(filtered_flagged_cache, 1):
-        sentiment = parsed.get('sentiment', 'Unknown')
-        date_display = parsed.get('date', 'Unknown')
-        short_date = date_display[:10] if len(date_display) >= 10 else date_display
-        checkbox_choices.append(f"[{i}] {sentiment} - {short_date}")
-    
-    return html, gr.update(choices=checkbox_choices, value=checkbox_choices)
-
-# ============ SAVE FLAGGED FUNCTIONS ============
-
-def save_flagged_selected(selected_labels):
-    if not selected_labels:
-        return None
-    
-    selected_files = []
-    for label in selected_labels:
-        match = re.search(r'\[(\d+)\]', label)
-        if match:
-            idx = int(match.group(1)) - 1
-            files = get_flagged_files()
-            if 0 <= idx < len(files):
-                selected_files.append(files[idx])
-    
-    if not selected_files:
-        return None
-    
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"flagged_export_{timestamp}.csv"
-    
-    with open(filename, 'w', newline='', encoding='utf-8') as outfile:
-        writer = csv.writer(outfile)
-        writer.writerow(['Review', 'Sentiment', 'Confidence', 'Positive%', 'Neutral%', 'Negative%', 'Date/Time'])
-        
-        for file in selected_files:
-            filepath = os.path.join(FLAG_PATH, file)
-            parsed = parse_flagged_file(filepath)
-            if parsed:
-                writer.writerow([
-                    parsed.get('review_full', ''),
-                    parsed.get('sentiment', 'Unknown'),
-                    f"{parsed.get('confidence', 0):.1f}%",
-                    f"{parsed.get('pos_prob', 0):.1f}%",
-                    f"{parsed.get('neu_prob', 0):.1f}%",
-                    f"{parsed.get('neg_prob', 0):.1f}%",
-                    parsed.get('date', '')
-                ])
-    
-    return filename
-
-def save_flagged_all():
-    files = get_flagged_files()
-    if not files:
-        return None
-    
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"flagged_all_export_{timestamp}.csv"
-    
-    with open(filename, 'w', newline='', encoding='utf-8') as outfile:
-        writer = csv.writer(outfile)
-        writer.writerow(['Review', 'Sentiment', 'Confidence', 'Positive%', 'Neutral%', 'Negative%', 'Date/Time'])
-        
-        for file in files:
-            filepath = os.path.join(FLAG_PATH, file)
-            parsed = parse_flagged_file(filepath)
-            if parsed:
-                writer.writerow([
-                    parsed.get('review_full', ''),
-                    parsed.get('sentiment', 'Unknown'),
-                    f"{parsed.get('confidence', 0):.1f}%",
-                    f"{parsed.get('pos_prob', 0):.1f}%",
-                    f"{parsed.get('neu_prob', 0):.1f}%",
-                    f"{parsed.get('neg_prob', 0):.1f}%",
-                    parsed.get('date', '')
-                ])
-    
-    return filename
-
-# ============ DELETE FLAGGED FUNCTIONS ============
-
-def delete_flagged_results(selected_labels):
-    if not selected_labels:
-        return "No files selected.", [], ""
-    
-    selected_files = []
-    for label in selected_labels:
-        match = re.search(r'\[(\d+)\]', label)
-        if match:
-            idx = int(match.group(1)) - 1
-            files = get_flagged_files()
-            if 0 <= idx < len(files):
-                selected_files.append(files[idx])
-    
-    if not selected_files:
-        return "No valid files selected.", [], ""
-    
-    deleted_count = 0
-    for file in selected_files:
-        filepath = os.path.join(FLAG_PATH, file)
-        try:
-            if os.path.exists(filepath):
-                os.remove(filepath)
-                deleted_count += 1
-        except:
-            pass
-    
-    display, checkbox_choices = get_flagged_display_table()
-    return f"Deleted {deleted_count} flagged file(s).", gr.update(choices=checkbox_choices, value=[]), display
-
-def delete_all_flagged():
-    files = get_flagged_files()
-    if not files:
-        return "No flagged files to delete.", [], ""
-    
-    deleted_count = 0
-    for file in files:
-        filepath = os.path.join(FLAG_PATH, file)
-        try:
-            if os.path.exists(filepath):
-                os.remove(filepath)
-                deleted_count += 1
-        except:
-            pass
-    
-    display, checkbox_choices = get_flagged_display_table()
-    return f"Deleted all {deleted_count} flagged files.", gr.update(choices=checkbox_choices, value=[]), display
-
-# ============ SAVE FUNCTIONS (DOWNLOAD) ============
+# ============ SAVE FUNCTIONS ============
 
 def save_selected_results_from_table(selected_labels):
     if not selected_labels or not filtered_results_cache:
         return None
-    
     selected_results = []
     for label in selected_labels:
         match = re.search(r'\[(\d+)\]', label)
@@ -1136,13 +797,10 @@ def save_selected_results_from_table(selected_labels):
             idx = int(match.group(1)) - 1
             if 0 <= idx < len(filtered_results_cache):
                 selected_results.append(filtered_results_cache[idx])
-    
     if not selected_results:
         return None
-    
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"exported_results_{timestamp}.csv"
-    
     with open(filename, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow(['Review', 'Sentiment', 'Confidence', 'Positive%', 'Neutral%', 'Negative%', 'Date/Time'])
@@ -1156,16 +814,13 @@ def save_selected_results_from_table(selected_labels):
                 f"{res.get('neg_prob', 0):.1f}%",
                 res.get('timestamp', '')
             ])
-    
     return filename
 
 def save_all_results():
     if not all_results:
         return None
-    
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"exported_all_results_{timestamp}.csv"
-    
     with open(filename, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow(['Review', 'Sentiment', 'Confidence', 'Positive%', 'Neutral%', 'Negative%', 'Date/Time'])
@@ -1179,45 +834,107 @@ def save_all_results():
                 f"{res.get('neg_prob', 0):.1f}%",
                 res.get('timestamp', '')
             ])
-    
     return filename
 
-# ============ OTHER FUNCTIONS ============
+def save_flagged_selected(selected_labels):
+    if not selected_labels:
+        return None
+    selected_files = []
+    for label in selected_labels:
+        match = re.search(r'\[(\d+)\]', label)
+        if match:
+            idx = int(match.group(1)) - 1
+            files = get_flagged_files()
+            if 0 <= idx < len(files):
+                selected_files.append(files[idx])
+    if not selected_files:
+        return None
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"flagged_export_{timestamp}.csv"
+    with open(filename, 'w', newline='', encoding='utf-8') as outfile:
+        writer = csv.writer(outfile)
+        writer.writerow(['Review', 'Sentiment', 'Confidence', 'Positive%', 'Neutral%', 'Negative%', 'Date/Time'])
+        for file in selected_files:
+            filepath = os.path.join(FLAG_PATH, file)
+            parsed = parse_flagged_file(filepath)
+            if parsed:
+                writer.writerow([
+                    parsed.get('review_full', ''),
+                    parsed.get('sentiment', 'Unknown'),
+                    f"{parsed.get('confidence', 0):.1f}%",
+                    f"{parsed.get('pos_prob', 0):.1f}%",
+                    f"{parsed.get('neu_prob', 0):.1f}%",
+                    f"{parsed.get('neg_prob', 0):.1f}%",
+                    parsed.get('date', '')
+                ])
+    return filename
 
-def create_empty_chart():
-    fig = go.Figure()
-    fig.add_annotation(text="No data available yet. Start analyzing reviews!", x=0.5, y=0.5, showarrow=False, font=dict(size=20, color="#2A0800"))
-    fig.update_layout(xaxis=dict(showgrid=False, zeroline=False, showticklabels=False), yaxis=dict(showgrid=False, zeroline=False, showticklabels=False), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=500)
-    return fig.to_html(full_html=False)
+def save_flagged_all():
+    files = get_flagged_files()
+    if not files:
+        return None
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"flagged_all_export_{timestamp}.csv"
+    with open(filename, 'w', newline='', encoding='utf-8') as outfile:
+        writer = csv.writer(outfile)
+        writer.writerow(['Review', 'Sentiment', 'Confidence', 'Positive%', 'Neutral%', 'Negative%', 'Date/Time'])
+        for file in files:
+            filepath = os.path.join(FLAG_PATH, file)
+            parsed = parse_flagged_file(filepath)
+            if parsed:
+                writer.writerow([
+                    parsed.get('review_full', ''),
+                    parsed.get('sentiment', 'Unknown'),
+                    f"{parsed.get('confidence', 0):.1f}%",
+                    f"{parsed.get('pos_prob', 0):.1f}%",
+                    f"{parsed.get('neu_prob', 0):.1f}%",
+                    f"{parsed.get('neg_prob', 0):.1f}%",
+                    parsed.get('date', '')
+                ])
+    return filename
 
-def create_visualization_charts():
-    if not sentiment_data:
-        return create_empty_chart()
-    valid_data = [d for d in sentiment_data if d['sentiment'] != 'Error']
-    if not valid_data:
-        return create_empty_chart()
-    df = pd.DataFrame(valid_data)
-    fig = go.Figure()
-    sentiment_counts = df['sentiment'].value_counts()
-    colors = {'Positive': '#2ecc71', 'Neutral': '#f1c40f', 'Negative': '#e74c3c'}
-    if not sentiment_counts.empty:
-        fig.add_trace(go.Pie(labels=sentiment_counts.index, values=sentiment_counts.values, marker=dict(colors=[colors.get(s, '#95a5a6') for s in sentiment_counts.index]), hole=0.4, textinfo='label+percent'))
-    fig.update_layout(height=500, showlegend=True, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#2A0800'))
-    return fig.to_html(full_html=False)
+# ============ DELETE FUNCTIONS ============
 
-def select_all_analyzed():
-    _, choices = get_analyzed_results_display()
-    return gr.update(value=choices)
+def delete_flagged_results(selected_labels):
+    if not selected_labels:
+        return "No files selected.", [], ""
+    selected_files = []
+    for label in selected_labels:
+        match = re.search(r'\[(\d+)\]', label)
+        if match:
+            idx = int(match.group(1)) - 1
+            files = get_flagged_files()
+            if 0 <= idx < len(files):
+                selected_files.append(files[idx])
+    if not selected_files:
+        return "No valid files selected.", [], ""
+    deleted_count = 0
+    for file in selected_files:
+        filepath = os.path.join(FLAG_PATH, file)
+        try:
+            if os.path.exists(filepath):
+                os.remove(filepath)
+                deleted_count += 1
+        except:
+            pass
+    display, checkbox_choices = get_flagged_display_table()
+    return f"Deleted {deleted_count} flagged file(s).", gr.update(choices=checkbox_choices, value=[]), display
 
-def deselect_all_analyzed():
-    return gr.update(value=[])
-
-def select_all_flagged():
-    _, choices = get_flagged_display_table()
-    return gr.update(value=choices)
-
-def deselect_all_flagged():
-    return gr.update(value=[])
+def delete_all_flagged():
+    files = get_flagged_files()
+    if not files:
+        return "No flagged files to delete.", [], ""
+    deleted_count = 0
+    for file in files:
+        filepath = os.path.join(FLAG_PATH, file)
+        try:
+            if os.path.exists(filepath):
+                os.remove(filepath)
+                deleted_count += 1
+        except:
+            pass
+    display, checkbox_choices = get_flagged_display_table()
+    return f"Deleted all {deleted_count} flagged files.", gr.update(choices=checkbox_choices, value=[]), display
 
 def delete_selected_from_table(selected_labels):
     global sentiment_data, all_results, all_reviews, sentiment_history, last_analysis_results, filtered_results_cache
@@ -1268,6 +985,43 @@ def delete_all_analyzed():
     last_analysis_results = []
     filtered_results_cache = []
     return f"Deleted all {count} results."
+
+# ============ OTHER FUNCTIONS ============
+
+def create_empty_chart():
+    fig = go.Figure()
+    fig.add_annotation(text="No data available yet. Start analyzing reviews!", x=0.5, y=0.5, showarrow=False, font=dict(size=20, color="#2A0800"))
+    fig.update_layout(xaxis=dict(showgrid=False, zeroline=False, showticklabels=False), yaxis=dict(showgrid=False, zeroline=False, showticklabels=False), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=500)
+    return fig.to_html(full_html=False)
+
+def create_visualization_charts():
+    if not sentiment_data:
+        return create_empty_chart()
+    valid_data = [d for d in sentiment_data if d['sentiment'] != 'Error']
+    if not valid_data:
+        return create_empty_chart()
+    df = pd.DataFrame(valid_data)
+    fig = go.Figure()
+    sentiment_counts = df['sentiment'].value_counts()
+    colors = {'Positive': '#2ecc71', 'Neutral': '#f1c40f', 'Negative': '#e74c3c'}
+    if not sentiment_counts.empty:
+        fig.add_trace(go.Pie(labels=sentiment_counts.index, values=sentiment_counts.values, marker=dict(colors=[colors.get(s, '#95a5a6') for s in sentiment_counts.index]), hole=0.4, textinfo='label+percent'))
+    fig.update_layout(height=500, showlegend=True, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#2A0800'))
+    return fig.to_html(full_html=False)
+
+def select_all_analyzed():
+    _, choices = get_analyzed_results_display()
+    return gr.update(value=choices)
+
+def deselect_all_analyzed():
+    return gr.update(value=[])
+
+def select_all_flagged():
+    _, choices = get_flagged_display_table()
+    return gr.update(value=choices)
+
+def deselect_all_flagged():
+    return gr.update(value=[])
 
 def clear_history():
     global last_analysis_results, sentiment_data, filtered_results_cache
@@ -1972,18 +1726,18 @@ with gr.Blocks(title="Cinema Sentiment Analysis", css=custom_css) as demo:
         fn=flag_selected_from_table,
         inputs=[analyzed_checkbox],
         outputs=[analyzed_status]
-    ).then(fn=refresh_flagged, outputs=[flagged_checkbox, flagged_table])
+    ).then(fn=refresh_flagged, outputs=[flagged_table, flagged_checkbox])
 
     flag_all_btn.click(
         fn=flag_all_from_table,
         outputs=[analyzed_status]
-    ).then(fn=refresh_flagged, outputs=[flagged_checkbox, flagged_table])
+    ).then(fn=refresh_flagged, outputs=[flagged_table, flagged_checkbox])
 
     flag_low_btn.click(
         fn=flag_low_confidence,
         inputs=[analyzed_checkbox],
         outputs=[analyzed_status]
-    ).then(fn=refresh_flagged, outputs=[flagged_checkbox, flagged_table])
+    ).then(fn=refresh_flagged, outputs=[flagged_table, flagged_checkbox])
 
     flagged_filter_dropdown.change(
         fn=filter_flagged_results,
@@ -2018,7 +1772,7 @@ with gr.Blocks(title="Cinema Sentiment Analysis", css=custom_css) as demo:
 
     # Tab auto-refresh
     tabs.select(fn=refresh_analyzed, inputs=None, outputs=[analyzed_table, analyzed_checkbox, analyzed_status], show_progress=False)
-    tabs.select(fn=refresh_flagged, inputs=None, outputs=[flagged_checkbox, flagged_table], show_progress=False)
+    tabs.select(fn=refresh_flagged, inputs=None, outputs=[flagged_table, flagged_checkbox], show_progress=False)
     tabs.select(fn=create_visualization_charts, inputs=None, outputs=[summary_output], show_progress=False)
 
     # Reset
