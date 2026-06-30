@@ -22,7 +22,10 @@ warnings.filterwarnings('ignore')
 
 MODEL_FOLDER = "best_sentiment_bigru"
 FLAG_PATH = "flagged_data/"
+SAVED_PATH = "saved_data/"
+
 os.makedirs(FLAG_PATH, exist_ok=True)
+os.makedirs(SAVED_PATH, exist_ok=True)
 
 # ============ LOAD SPLIT MODEL FILES ============
 
@@ -505,7 +508,7 @@ def create_visualization_charts():
 def get_flagged_files():
     if not os.path.exists(FLAG_PATH):
         return []
-    files = [f for f in os.listdir(FLAG_PATH) if f.endswith('.csv') and not f.startswith('flagged_export_') and not f.startswith('exported_')]
+    files = [f for f in os.listdir(FLAG_PATH) if f.endswith('.csv')]
     return sorted(files)
 
 def parse_flagged_file(filepath):
@@ -686,7 +689,7 @@ def save_selected_results_from_table(selected_labels):
     save_count = 0
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"exported_results_{timestamp}.csv"
-    filepath = os.path.join(FLAG_PATH, filename)
+    filepath = os.path.join(SAVED_PATH, filename)
     try:
         with open(filepath, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
@@ -703,7 +706,7 @@ def save_all_results():
         return "No results to save."
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"exported_all_results_{timestamp}.csv"
-    filepath = os.path.join(FLAG_PATH, filename)
+    filepath = os.path.join(SAVED_PATH, filename)
     try:
         with open(filepath, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
@@ -915,7 +918,7 @@ def save_flagged_selected(selected_labels):
         return "No valid files selected."
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"flagged_export_{timestamp}.csv"
-    filepath = os.path.join(FLAG_PATH, filename)
+    filepath = os.path.join(SAVED_PATH, filename)
     try:
         with open(filepath, 'w', newline='', encoding='utf-8') as outfile:
             writer = csv.writer(outfile)
@@ -943,7 +946,7 @@ def save_flagged_all():
         return "No flagged files to save."
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"flagged_all_export_{timestamp}.csv"
-    filepath = os.path.join(FLAG_PATH, filename)
+    filepath = os.path.join(SAVED_PATH, filename)
     try:
         with open(filepath, 'w', newline='', encoding='utf-8') as outfile:
             writer = csv.writer(outfile)
@@ -1506,7 +1509,7 @@ footer { text-align: center !important; margin-top: 16px !important; color: #AEA
 
 .tab-nav button { cursor: pointer !important; }
 .tabs { display: block !important; }
-.gr-checkbox-group { transition: none !important;
+.gr-checkbox-group { transition: none !important; }
 """
 
 # ============ BUILD GRADIO UI ============
