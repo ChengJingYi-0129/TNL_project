@@ -401,7 +401,7 @@ def get_analyzed_results_display():
         checkbox_choices.append(f"[{i}] {res.get('sentiment', 'Unknown')} - {date_part}")
     return html, checkbox_choices
 
-# ============ FLAGGED DATA FUNCTIONS (COMPLETELY REWRITTEN) ============
+# ============ FLAGGED DATA FUNCTIONS ============
 
 def get_flagged_files():
     """Get list of flagged CSV files"""
@@ -411,18 +411,14 @@ def get_flagged_files():
     return sorted(files)
 
 def parse_flagged_file(filepath):
-    """
-    Parse a flagged CSV file and extract all data
-    Returns dict with all fields or None if parsing fails
-    """
+    """Parse a flagged CSV file and extract all data"""
     try:
-        # Try reading as CSV with pandas first
+        # Try reading as CSV with pandas
         df = pd.read_csv(filepath, encoding='utf-8')
         
         if df.empty:
             return None
         
-        # Get first row (each file should have one review)
         row = df.iloc[0]
         
         # Extract review text
@@ -437,7 +433,7 @@ def parse_flagged_file(filepath):
         if sentiment == 'nan':
             sentiment = 'Unknown'
         
-        # Extract confidence (remove % if present)
+        # Extract confidence
         confidence_str = str(row.get('Confidence', '0'))
         confidence = float(confidence_str.replace('%', '')) if confidence_str != 'nan' else 0
         
@@ -460,20 +456,11 @@ def parse_flagged_file(filepath):
         # Extract date from timestamp
         date_str = ''
         if timestamp:
-            # Try to extract date from timestamp
             date_match = re.search(r'(\d{4}-\d{2}-\d{2})', timestamp)
             if date_match:
                 date_str = date_match.group(1)
-            else:
-                # Try to parse full timestamp
-                try:
-                    dt = parse_datetime_advanced(timestamp)
-                    if dt:
-                        date_str = dt.strftime('%Y-%m-%d')
-                except:
-                    pass
         
-        # Read full content for backward compatibility
+        # Read full content
         content = ''
         with open(filepath, 'r', encoding='utf-8') as f:
             content = f.read()
@@ -493,140 +480,11 @@ def parse_flagged_file(filepath):
         }
         
     except Exception as e:
-        print(f"Error parsing CSV with pandas: {e}")
-        
-        # Fallback: Try parsing as plain text
-        try:
-            return parse_flagged_file_text(filepath)
-        except:
-            return None
-
-def parse_flagged_file_text(filepath):
-    """
-    Fallback: Parse flagged file as plain text
-    Used when pandas fails
-    """
-    with open(filepath, 'r', encoding='utf-8') as f:
-        content = f.read()
-    
-    # Default values
-    sentiment = "Unknown"
-    confidence = 0
-    pos_prob = 0
-    neu_prob = 0
-    neg_prob = 0
-    review_full = ""
-    date_str = ""
-    
-    # Try to parse CSV-like content
-    lines = content.strip().split('\n')
-    
-    # Find the header row
-    header_row = -1
-    for i, line in enumerate(lines):
-        if 'Review' in line and 'Sentiment' in line and 'Confidence' in line:
-            header_row = i
-            break
-    
-    if header_row >= 0 and len(lines) > header_row + 1:
-        # Parse data row
-        data_line = lines[header_row + 1]
-        
-        # Try to parse as CSV
-        parts = []
-        in_quotes = False
-        current = ""
-        
-        for char in data_line:
-            if char == '"':
-                in_quotes = not in_quotes
-            elif char == ',' and not in_quotes:
-                parts.append(current.strip())
-                current = ""
-            else:
-                current += char
-        parts.append(current.strip())
-        
-        # Map parts to columns
-        if len(parts) >= 8:
-            review_full = parts[0].strip('"')
-            sentiment = parts[3] if len(parts) > 3 else 'Unknown'
-            confidence = float(parts[4].replace('%', '')) if len(parts) > 4 else 0
-            pos_prob = float(parts[5].replace('%', '')) if len(parts) > 5 else 0
-            neu_prob = float(parts[6].replace('%', '')) if len(parts) > 6 else 0
-            neg_prob = float(parts[7].replace('%', '')) if len(parts) > 7 else 0
-            timestamp = parts[2] if len(parts) > 2 else ''
-            
-            # Extract date from timestamp
-            date_match = re.search(r'(\d{4}-\d{2}-\d{2})', timestamp)
-            if date_match:
-                date_str = date_match.group(1)
-    
-    # If parsing failed, try regex extraction
-    if not review_full:
-        # Look for review in content
-        for line in lines:
-            if line and not line.startswith('Review,') and not line.startswith('"Review,'):
-                try:
-                    if line.startswith('"'):
-                        end = line.find('"', 1)
-                        if end > 0:
-                            review_full = line[1:end]
-                            break
-                    else:
-                        parts = line.split(',', 1)
-                        if parts:
-                            review_full = parts[0].strip()
-                            break
-                except:
-                    pass
-        
-        # Try regex for other fields
-        sentiment_match = re.search(r'Sentiment[:\s]+(\w+)', content, re.IGNORECASE)
-        if sentiment_match:
-            sentiment = sentiment_match.group(1)
-        
-        conf_match = re.search(r'Confidence[:\s]+([\d.]+)%', content, re.IGNORECASE)
-        if conf_match:
-            confidence = float(conf_match.group(1))
-        
-        pos_match = re.search(r'Positive%?[:\s]+([\d.]+)%', content, re.IGNORECASE)
-        if pos_match:
-            pos_prob = float(pos_match.group(1))
-        
-        neu_match = re.search(r'Neutral%?[:\s]+([\d.]+)%', content, re.IGNORECASE)
-        if neu_match:
-            neu_prob = float(neu_match.group(1))
-        
-        neg_match = re.search(r'Negative%?[:\s]+([\d.]+)%', content, re.IGNORECASE)
-        if neg_match:
-            neg_prob = float(neg_match.group(1))
-        
-        date_match = re.search(r'(\d{4}-\d{2}-\d{2})', content)
-        if date_match:
-            date_str = date_match.group(1)
-    
-    review_preview = review_full[:50] + "..." if len(review_full) > 50 else review_full
-    
-    return {
-        'content': content,
-        'sentiment': sentiment,
-        'confidence': confidence,
-        'pos_prob': pos_prob,
-        'neu_prob': neu_prob,
-        'neg_prob': neg_prob,
-        'date': date_str,
-        'timestamp': date_str,
-        'review_preview': review_preview,
-        'review_full': review_full,
-        'filename': os.path.basename(filepath)
-    }
+        print(f"Error parsing flagged file {filepath}: {e}")
+        return None
 
 def get_flagged_display_table():
-    """
-    Generate HTML table and checkbox choices for flagged data
-    Returns (html_string, checkbox_choices)
-    """
+    """Generate HTML table and checkbox choices for flagged data"""
     files = get_flagged_files()
     
     if not files:
@@ -780,30 +638,6 @@ def get_flagged_display_table():
     
     return html, checkbox_choices
 
-def get_readable_flagged_list():
-    """Get human-readable list of flagged files"""
-    global analyzed_label_to_filename
-    analyzed_label_to_filename = {}
-    
-    files = get_flagged_files()
-    if not files:
-        return []
-    
-    readable_list = []
-    for file in files:
-        filepath = os.path.join(FLAG_PATH, file)
-        parsed = parse_flagged_file(filepath)
-        if parsed:
-            date_display = parsed['date'][:10] if parsed['date'] else 'Unknown'
-            label = f"{parsed['sentiment']} - {parsed['review_preview']} ({date_display})"
-            readable_list.append(label)
-            analyzed_label_to_filename[label] = file
-        else:
-            readable_list.append(file)
-            analyzed_label_to_filename[file] = file
-    
-    return readable_list
-
 def get_existing_flagged_reviews():
     """Get dict of existing flagged reviews to prevent duplicates"""
     existing_reviews = {}
@@ -826,9 +660,7 @@ def get_existing_flagged_reviews():
 # ============ FLAG FUNCTIONS ============
 
 def flag_selected_from_table(selected_labels):
-    """
-    Flag selected results from the analyzed results table
-    """
+    """Flag selected results from the analyzed results table"""
     if not selected_labels or not filtered_results_cache:
         return "No results selected."
     
@@ -910,9 +742,7 @@ def flag_selected_from_table(selected_labels):
         return f"Flagged {flagged_count} review(s)!"
 
 def flag_all_from_table():
-    """
-    Flag all analyzed results
-    """
+    """Flag all analyzed results"""
     if not all_results:
         return "No results to flag."
     
@@ -979,9 +809,7 @@ def flag_all_from_table():
         return "No new reviews to flag (all already exist)"
 
 def flag_low_confidence(selected_labels):
-    """
-    Flag selected results with low confidence (below 70%)
-    """
+    """Flag selected results with low confidence (below 70%)"""
     if not selected_labels or not filtered_results_cache:
         return "No results selected."
     
@@ -1068,23 +896,15 @@ def flag_low_confidence(selected_labels):
     else:
         return f"Flagged {flagged_count} low confidence reviews (threshold: {THRESHOLD}%)"
 
-def get_flagged_display():
-    """Get flagged display HTML (wrapper function)"""
-    html, _ = get_flagged_display_table()
-    return html
-
 def refresh_flagged():
-    """Refresh flagged data display - returns updated table and checkbox"""
+    """Refresh flagged data display"""
     display, checkbox_choices = get_flagged_display_table()
-    # Return both the table HTML and the checkbox update
     return display, gr.update(choices=checkbox_choices, value=[])
 
 # ============ FILTER FUNCTIONS ============
 
 def filter_flagged_results(sentiment_filter):
-    """
-    Filter flagged results by sentiment
-    """
+    """Filter flagged results by sentiment"""
     global filtered_flagged_cache
     
     files = get_flagged_files()
@@ -1249,23 +1069,18 @@ def filter_flagged_results(sentiment_filter):
 # ============ SAVE FLAGGED FUNCTIONS ============
 
 def save_flagged_selected(selected_labels):
-    """
-    Save selected flagged files to CSV
-    """
+    """Save selected flagged files to CSV"""
     if not selected_labels:
         return None
     
     selected_files = []
     for label in selected_labels:
-        if label in analyzed_label_to_filename:
-            selected_files.append(analyzed_label_to_filename[label])
-        else:
-            match = re.search(r'\[(\d+)\]', label)
-            if match:
-                idx = int(match.group(1)) - 1
-                files = get_flagged_files()
-                if 0 <= idx < len(files):
-                    selected_files.append(files[idx])
+        match = re.search(r'\[(\d+)\]', label)
+        if match:
+            idx = int(match.group(1)) - 1
+            files = get_flagged_files()
+            if 0 <= idx < len(files):
+                selected_files.append(files[idx])
     
     if not selected_files:
         return None
@@ -1294,9 +1109,7 @@ def save_flagged_selected(selected_labels):
     return filename
 
 def save_flagged_all():
-    """
-    Save all flagged files to CSV
-    """
+    """Save all flagged files to CSV"""
     files = get_flagged_files()
     if not files:
         return None
@@ -1327,23 +1140,18 @@ def save_flagged_all():
 # ============ DELETE FLAGGED FUNCTIONS ============
 
 def delete_flagged_results(selected_labels):
-    """
-    Delete selected flagged files
-    """
+    """Delete selected flagged files"""
     if not selected_labels:
         return "No files selected.", [], ""
     
     selected_files = []
     for label in selected_labels:
-        if label in analyzed_label_to_filename:
-            selected_files.append(analyzed_label_to_filename[label])
-        else:
-            match = re.search(r'\[(\d+)\]', label)
-            if match:
-                idx = int(match.group(1)) - 1
-                files = get_flagged_files()
-                if 0 <= idx < len(files):
-                    selected_files.append(files[idx])
+        match = re.search(r'\[(\d+)\]', label)
+        if match:
+            idx = int(match.group(1)) - 1
+            files = get_flagged_files()
+            if 0 <= idx < len(files):
+                selected_files.append(files[idx])
     
     if not selected_files:
         return "No valid files selected.", [], ""
@@ -1362,9 +1170,7 @@ def delete_flagged_results(selected_labels):
     return f"Deleted {deleted_count} flagged file(s).", gr.update(choices=checkbox_choices, value=[]), display
 
 def delete_all_flagged():
-    """
-    Delete all flagged files
-    """
+    """Delete all flagged files"""
     files = get_flagged_files()
     if not files:
         return "No flagged files to delete.", [], ""
@@ -2209,12 +2015,18 @@ with gr.Blocks(title="Cinema Sentiment Analysis", css=custom_css) as demo:
         fn=delete_selected_from_table,
         inputs=[analyzed_checkbox],
         outputs=[analyzed_status]
-    ).then(fn=refresh_analyzed, outputs=[analyzed_table, analyzed_checkbox, analyzed_status])
+    ).then(
+        fn=refresh_analyzed, 
+        outputs=[analyzed_table, analyzed_checkbox, analyzed_status]
+    )
 
     delete_all_btn.click(
         fn=delete_all_analyzed,
         outputs=[analyzed_status]
-    ).then(fn=refresh_analyzed, outputs=[analyzed_table, analyzed_checkbox, analyzed_status])
+    ).then(
+        fn=refresh_analyzed, 
+        outputs=[analyzed_table, analyzed_checkbox, analyzed_status]
+    )
 
     save_selected_btn.click(
         fn=save_selected_results_from_table,
@@ -2227,33 +2039,31 @@ with gr.Blocks(title="Cinema Sentiment Analysis", css=custom_css) as demo:
         outputs=[download_output]
     )
 
-# Replace the flag button event handlers with these:
+    flag_selected_btn.click(
+        fn=flag_selected_from_table,
+        inputs=[analyzed_checkbox],
+        outputs=[analyzed_status]
+    ).then(
+        fn=refresh_flagged,
+        outputs=[flagged_table, flagged_checkbox]
+    )
 
-flag_selected_btn.click(
-    fn=flag_selected_from_table,
-    inputs=[analyzed_checkbox],
-    outputs=[analyzed_status]
-).then(
-    fn=refresh_flagged,
-    outputs=[flagged_table, flagged_checkbox]
-)
+    flag_all_btn.click(
+        fn=flag_all_from_table,
+        outputs=[analyzed_status]
+    ).then(
+        fn=refresh_flagged,
+        outputs=[flagged_table, flagged_checkbox]
+    )
 
-flag_all_btn.click(
-    fn=flag_all_from_table,
-    outputs=[analyzed_status]
-).then(
-    fn=refresh_flagged,
-    outputs=[flagged_table, flagged_checkbox]
-)
-
-flag_low_btn.click(
-    fn=flag_low_confidence,
-    inputs=[analyzed_checkbox],
-    outputs=[analyzed_status]
-).then(
-    fn=refresh_flagged,
-    outputs=[flagged_table, flagged_checkbox]
-)
+    flag_low_btn.click(
+        fn=flag_low_confidence,
+        inputs=[analyzed_checkbox],
+        outputs=[analyzed_status]
+    ).then(
+        fn=refresh_flagged,
+        outputs=[flagged_table, flagged_checkbox]
+    )
 
     flagged_filter_dropdown.change(
         fn=filter_flagged_results,
