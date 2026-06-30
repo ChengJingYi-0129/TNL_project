@@ -172,6 +172,8 @@ def parse_datetime_advanced(dt_string):
         '%m/%d/%Y %I:%M %p',
         '%m/%d/%Y %H:%M:%S',
         '%m/%d/%Y %H:%M',
+        '%Y-%m-%d %H:%M:%S',
+        '%Y-%m-%d %H:%M',
     ]
     for fmt in formats:
         try:
@@ -399,7 +401,7 @@ def get_analyzed_results_display():
         checkbox_choices.append(f"[{i}] {res.get('sentiment', 'Unknown')} - {date_part}")
     return html, checkbox_choices
 
-# ============ FLAGGED DATA FUNCTIONS (FIXED) ============
+# ============ FLAGGED DATA FUNCTIONS (COMPLETELY REWRITTEN) ============
 
 def get_flagged_files():
     """Get list of flagged CSV files"""
@@ -821,7 +823,7 @@ def get_existing_flagged_reviews():
     
     return existing_reviews
 
-# ============ FLAG FUNCTIONS (FIXED) ============
+# ============ FLAG FUNCTIONS ============
 
 def flag_selected_from_table(selected_labels):
     """
@@ -1243,6 +1245,141 @@ def filter_flagged_results(sentiment_filter):
     
     return html, gr.update(choices=checkbox_choices, value=checkbox_choices)
 
+# ============ SAVE FLAGGED FUNCTIONS ============
+
+def save_flagged_selected(selected_labels):
+    """
+    Save selected flagged files to CSV
+    """
+    if not selected_labels:
+        return None
+    
+    selected_files = []
+    for label in selected_labels:
+        if label in analyzed_label_to_filename:
+            selected_files.append(analyzed_label_to_filename[label])
+        else:
+            match = re.search(r'\[(\d+)\]', label)
+            if match:
+                idx = int(match.group(1)) - 1
+                files = get_flagged_files()
+                if 0 <= idx < len(files):
+                    selected_files.append(files[idx])
+    
+    if not selected_files:
+        return None
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"flagged_export_{timestamp}.csv"
+    
+    with open(filename, 'w', newline='', encoding='utf-8') as outfile:
+        writer = csv.writer(outfile)
+        writer.writerow(['Review', 'Sentiment', 'Confidence', 'Positive%', 'Neutral%', 'Negative%', 'Date/Time'])
+        
+        for file in selected_files:
+            filepath = os.path.join(FLAG_PATH, file)
+            parsed = parse_flagged_file(filepath)
+            if parsed:
+                writer.writerow([
+                    parsed.get('review_full', ''),
+                    parsed.get('sentiment', 'Unknown'),
+                    f"{parsed.get('confidence', 0):.1f}%",
+                    f"{parsed.get('pos_prob', 0):.1f}%",
+                    f"{parsed.get('neu_prob', 0):.1f}%",
+                    f"{parsed.get('neg_prob', 0):.1f}%",
+                    parsed.get('date', '')
+                ])
+    
+    return filename
+
+def save_flagged_all():
+    """
+    Save all flagged files to CSV
+    """
+    files = get_flagged_files()
+    if not files:
+        return None
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"flagged_all_export_{timestamp}.csv"
+    
+    with open(filename, 'w', newline='', encoding='utf-8') as outfile:
+        writer = csv.writer(outfile)
+        writer.writerow(['Review', 'Sentiment', 'Confidence', 'Positive%', 'Neutral%', 'Negative%', 'Date/Time'])
+        
+        for file in files:
+            filepath = os.path.join(FLAG_PATH, file)
+            parsed = parse_flagged_file(filepath)
+            if parsed:
+                writer.writerow([
+                    parsed.get('review_full', ''),
+                    parsed.get('sentiment', 'Unknown'),
+                    f"{parsed.get('confidence', 0):.1f}%",
+                    f"{parsed.get('pos_prob', 0):.1f}%",
+                    f"{parsed.get('neu_prob', 0):.1f}%",
+                    f"{parsed.get('neg_prob', 0):.1f}%",
+                    parsed.get('date', '')
+                ])
+    
+    return filename
+
+# ============ DELETE FLAGGED FUNCTIONS ============
+
+def delete_flagged_results(selected_labels):
+    """
+    Delete selected flagged files
+    """
+    if not selected_labels:
+        return "No files selected.", [], ""
+    
+    selected_files = []
+    for label in selected_labels:
+        if label in analyzed_label_to_filename:
+            selected_files.append(analyzed_label_to_filename[label])
+        else:
+            match = re.search(r'\[(\d+)\]', label)
+            if match:
+                idx = int(match.group(1)) - 1
+                files = get_flagged_files()
+                if 0 <= idx < len(files):
+                    selected_files.append(files[idx])
+    
+    if not selected_files:
+        return "No valid files selected.", [], ""
+    
+    deleted_count = 0
+    for file in selected_files:
+        filepath = os.path.join(FLAG_PATH, file)
+        try:
+            if os.path.exists(filepath):
+                os.remove(filepath)
+                deleted_count += 1
+        except:
+            pass
+    
+    display, checkbox_choices = get_flagged_display_table()
+    return f"Deleted {deleted_count} flagged file(s).", gr.update(choices=checkbox_choices, value=[]), display
+
+def delete_all_flagged():
+    """
+    Delete all flagged files
+    """
+    files = get_flagged_files()
+    if not files:
+        return "No flagged files to delete.", [], ""
+    
+    deleted_count = 0
+    for file in files:
+        filepath = os.path.join(FLAG_PATH, file)
+        try:
+            if os.path.exists(filepath):
+                os.remove(filepath)
+                deleted_count += 1
+        except:
+            pass
+    
+    display, checkbox_choices = get_flagged_display_table()
+    return f"Deleted all {deleted_count} flagged files.", gr.update(choices=checkbox_choices, value=[]), display
 
 # ============ SAVE FUNCTIONS (DOWNLOAD) ============
 
@@ -1302,239 +1439,6 @@ def save_all_results():
             ])
     
     return filename
-
-def save_flagged_selected(selected_labels):
-    if not selected_labels:
-        return None
-    
-    selected_files = []
-    for label in selected_labels:
-        if label in analyzed_label_to_filename:
-            selected_files.append(analyzed_label_to_filename[label])
-        else:
-            match = re.search(r'\[(\d+)\]', label)
-            if match:
-                idx = int(match.group(1)) - 1
-                files = get_flagged_files()
-                if 0 <= idx < len(files):
-                    selected_files.append(files[idx])
-    
-    if not selected_files:
-        return None
-    
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"flagged_export_{timestamp}.csv"
-    
-    with open(filename, 'w', newline='', encoding='utf-8') as outfile:
-        writer = csv.writer(outfile)
-        writer.writerow(['Review', 'Sentiment', 'Confidence', 'Positive%', 'Neutral%', 'Negative%', 'Date/Time'])
-        
-        for file in selected_files:
-            filepath = os.path.join(FLAG_PATH, file)
-            try:
-                parsed = parse_flagged_file(filepath)
-                if parsed:
-                    writer.writerow([
-                        parsed.get('review_full', ''),
-                        parsed.get('sentiment', 'Unknown'),
-                        f"{parsed.get('confidence', 0):.1f}%",
-                        f"{parsed.get('pos_prob', 0):.1f}%",
-                        f"{parsed.get('neu_prob', 0):.1f}%",
-                        f"{parsed.get('neg_prob', 0):.1f}%",
-                        parsed.get('date', '')
-                    ])
-            except:
-                pass
-    
-    return filename
-
-def save_flagged_all():
-    files = get_flagged_files()
-    if not files:
-        return None
-    
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"flagged_all_export_{timestamp}.csv"
-    
-    with open(filename, 'w', newline='', encoding='utf-8') as outfile:
-        writer = csv.writer(outfile)
-        writer.writerow(['Review', 'Sentiment', 'Confidence', 'Positive%', 'Neutral%', 'Negative%', 'Date/Time'])
-        
-        for file in files:
-            filepath = os.path.join(FLAG_PATH, file)
-            try:
-                parsed = parse_flagged_file(filepath)
-                if parsed:
-                    writer.writerow([
-                        parsed.get('review_full', ''),
-                        parsed.get('sentiment', 'Unknown'),
-                        f"{parsed.get('confidence', 0):.1f}%",
-                        f"{parsed.get('pos_prob', 0):.1f}%",
-                        f"{parsed.get('neu_prob', 0):.1f}%",
-                        f"{parsed.get('neg_prob', 0):.1f}%",
-                        parsed.get('date', '')
-                    ])
-            except:
-                pass
-    
-    return filename
-
-# ============ DELETE FUNCTIONS ============
-
-def delete_flagged_results(selected_labels):
-    if not selected_labels:
-        return "No files selected.", [], ""
-    
-    selected_files = []
-    for label in selected_labels:
-        if label in analyzed_label_to_filename:
-            selected_files.append(analyzed_label_to_filename[label])
-        else:
-            match = re.search(r'\[(\d+)\]', label)
-            if match:
-                idx = int(match.group(1)) - 1
-                files = get_flagged_files()
-                if 0 <= idx < len(files):
-                    selected_files.append(files[idx])
-    
-    if not selected_files:
-        return "No valid files selected.", [], ""
-    
-    deleted_count = 0
-    for file in selected_files:
-        filepath = os.path.join(FLAG_PATH, file)
-        try:
-            if os.path.exists(filepath):
-                os.remove(filepath)
-                deleted_count += 1
-        except:
-            pass
-    
-    display, checkbox_choices = get_flagged_display_table()
-    return f"Deleted {deleted_count} flagged file(s).", gr.update(choices=checkbox_choices, value=[]), display
-
-def delete_all_flagged():
-    files = get_flagged_files()
-    if not files:
-        return "No flagged files to delete.", [], ""
-    
-    deleted_count = 0
-    for file in files:
-        filepath = os.path.join(FLAG_PATH, file)
-        try:
-            if os.path.exists(filepath):
-                os.remove(filepath)
-                deleted_count += 1
-        except:
-            pass
-    
-    display, checkbox_choices = get_flagged_display_table()
-    return f"Deleted all {deleted_count} flagged files.", gr.update(choices=checkbox_choices, value=[]), display
-
-# ============ FILTER FUNCTIONS ============
-
-def filter_flagged_results(sentiment_filter):
-    global filtered_flagged_cache
-    
-    files = get_flagged_files()
-    if not files:
-        return "No flagged data yet.", []
-    
-    parsed_files = []
-    for file in files:
-        filepath = os.path.join(FLAG_PATH, file)
-        parsed = parse_flagged_file(filepath)
-        if parsed:
-            parsed_files.append(parsed)
-    
-    if not parsed_files:
-        return "No flagged data yet.", []
-    
-    if sentiment_filter == "All":
-        filtered_flagged_cache = parsed_files
-    else:
-        filtered_flagged_cache = [f for f in parsed_files if f.get('sentiment') == sentiment_filter]
-    
-    if not filtered_flagged_cache:
-        return f"No {sentiment_filter} flagged files found.", []
-    
-    # Build HTML table for filtered results
-    html = """
-    <style>
-        .flagged-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        .flagged-table th { background: #D5C6E0; color: #000000 !important; padding: 10px; text-align: left; font-weight: 700; border: 1px solid #2A0800 !important; }
-        .flagged-table td { padding: 8px 10px; border: 1px solid #2A0800 !important; vertical-align: top; background: #ffffff; }
-        .flagged-table tr:hover td { background: #f5f0f7 !important; }
-        .flagged-container { max-height: 400px; overflow-y: auto; border: 2px solid #2A0800 !important; border-radius: 8px; background: #ffffff; }
-        .table-total { color: #ffffff !important; font-weight: 700; }
-        .sentiment-pos { color: #2ecc71 !important; font-weight: 700; }
-        .sentiment-neu { color: #f1c40f !important; font-weight: 700; }
-        .sentiment-neg { color: #e74c3c !important; font-weight: 700; }
-        .conf-high { color: #2ecc71 !important; font-weight: 700; }
-        .conf-low { color: #e74c3c !important; font-weight: 700; }
-        .review-preview { max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #000000 !important; }
-        .review-preview:hover { white-space: normal; overflow: visible; background: #ffffff; position: relative; z-index: 20; box-shadow: 0 2px 8px rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 4px; border: 1px solid #2A0800; }
-    </style>
-    <div class="flagged-container">
-        <table class="flagged-table">
-            <thead>
-                <tr>
-                    <th style="width:40px;">#</th>
-                    <th style="width:100px;">Sentiment</th>
-                    <th style="width:100px;">Confidence</th>
-                    <th style="width:80px;">Positive</th>
-                    <th style="width:80px;">Neutral</th>
-                    <th style="width:80px;">Negative</th>
-                    <th style="width:180px;">Date/Time</th>
-                    <th>Review</th>
-                </tr>
-            </thead>
-            <tbody>
-    """
-    
-    for i, parsed in enumerate(filtered_flagged_cache, 1):
-        sentiment = parsed.get('sentiment', 'Unknown')
-        emoji = get_sentiment_emoji(sentiment)
-        confidence = parsed.get('confidence', 0)
-        pos_prob = parsed.get('pos_prob', 0)
-        neu_prob = parsed.get('neu_prob', 0)
-        neg_prob = parsed.get('neg_prob', 0)
-        date_display = parsed.get('date', 'Unknown')
-        review = parsed.get('review_preview', '')
-        review_full = parsed.get('review_full', '')
-        
-        sent_class = 'sentiment-pos' if sentiment == 'Positive' else 'sentiment-neu' if sentiment == 'Neutral' else 'sentiment-neg'
-        conf_class = 'conf-high' if confidence >= 70 else 'conf-low'
-        
-        html += f"""
-            <tr>
-                <td style="color:#000000 !important; text-align:center;">{i}</td>
-                <td class="{sent_class}">{emoji} {sentiment}</td>
-                <td class="{conf_class}">{confidence:.1f}%</td>
-                <td style="color:#000000 !important;">{pos_prob:.1f}%</td>
-                <td style="color:#000000 !important;">{neu_prob:.1f}%</td>
-                <td style="color:#000000 !important;">{neg_prob:.1f}%</td>
-                <td style="color:#000000 !important;">{date_display}</td>
-                <td class="review-preview" title="{review_full}" style="color:#000000 !important;">{review}</td>
-            </tr>
-        """
-    
-    html += """
-            </tbody>
-        </table>
-    </div>
-    """
-    
-    html += f"<br><span class='table-total'>Total: {len(filtered_flagged_cache)} flagged files (filtered: {sentiment_filter})</span>"
-    
-    checkbox_choices = []
-    for i, parsed in enumerate(filtered_flagged_cache, 1):
-        sentiment = parsed.get('sentiment', 'Unknown')
-        date_display = parsed.get('date', 'Unknown')
-        short_date = date_display[:10] if len(date_display) >= 10 else date_display
-        checkbox_choices.append(f"[{i}] {sentiment} - {short_date}")
-    
-    return html, gr.update(choices=checkbox_choices, value=checkbox_choices)
 
 # ============ OTHER FUNCTIONS ============
 
