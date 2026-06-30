@@ -808,8 +808,12 @@ def save_flagged_all():
     return filename
 
 def flag_selected_from_table(selected_labels):
-    if not selected_labels or not filtered_results_cache:
-        return "No results selected."
+    if not selected_labels:
+        return "No results selected. Check boxes below the table."
+    
+    if not filtered_results_cache:
+        return "No results to flag."
+    
     selected_results = []
     for label in selected_labels:
         match = re.search(r'\[(\d+)\]', label)
@@ -817,35 +821,54 @@ def flag_selected_from_table(selected_labels):
             idx = int(match.group(1)) - 1
             if 0 <= idx < len(filtered_results_cache):
                 selected_results.append(filtered_results_cache[idx])
+    
     if not selected_results:
         return "No valid results selected."
+    
     existing_reviews = get_existing_flagged_reviews()
     flagged_count = 0
     skipped_count = 0
+    
     for res in selected_results:
         review_text = res.get('review', '').strip()
         timestamp = res.get('timestamp', 'Not specified')
+        
         if not review_text:
             continue
+        
         date_only = 'No date'
         if timestamp and timestamp != 'Not specified':
             date_only = timestamp[:10] if len(timestamp) >= 10 else timestamp
+        
         key = (review_text, date_only)
+        
         if key in existing_reviews:
             skipped_count += 1
             continue
+        
         timestamp_now = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
         filename = f"flag_{timestamp_now}.csv"
         filepath = os.path.join(FLAG_PATH, filename)
+        
         try:
             with open(filepath, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow(['Review', 'Result', 'Timestamp', 'Sentiment', 'Confidence', 'Positive%', 'Neutral%', 'Negative%'])
-                writer.writerow([res.get('review', ''), res.get('full_result', ''), res.get('timestamp', datetime.now().strftime("%Y-%m-%d %H:%M:%S")), res.get('sentiment', 'Unknown'), f"{res.get('confidence', 0):.1f}%", f"{res.get('pos_prob', 0):.1f}%", f"{res.get('neu_prob', 0):.1f}%", f"{res.get('neg_prob', 0):.1f}%"])
+                writer.writerow([
+                    res.get('review', ''),
+                    res.get('full_result', ''),
+                    res.get('timestamp', datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+                    res.get('sentiment', 'Unknown'),
+                    f"{res.get('confidence', 0):.1f}%",
+                    f"{res.get('pos_prob', 0):.1f}%",
+                    f"{res.get('neu_prob', 0):.1f}%",
+                    f"{res.get('neg_prob', 0):.1f}%"
+                ])
             flagged_count += 1
             existing_reviews[key] = filename
         except Exception as e:
             print(f"Error flagging review: {e}")
+    
     if flagged_count == 0 and skipped_count > 0:
         return f"Flagged 0 reviews, {skipped_count} skipped (already exist)"
     elif flagged_count > 0 and skipped_count > 0:
@@ -856,33 +879,51 @@ def flag_selected_from_table(selected_labels):
 def flag_all_from_table():
     if not all_results:
         return "No results to flag."
+    
     existing_reviews = get_existing_flagged_reviews()
     flagged_count = 0
     skipped_count = 0
+    
     for res in all_results:
         review_text = res.get('review', '').strip()
         timestamp = res.get('timestamp', 'Not specified')
+        
         if not review_text:
             continue
+        
         date_only = 'No date'
         if timestamp and timestamp != 'Not specified':
             date_only = timestamp[:10] if len(timestamp) >= 10 else timestamp
+        
         key = (review_text, date_only)
+        
         if key in existing_reviews:
             skipped_count += 1
             continue
+        
         timestamp_now = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
         filename = f"flag_{timestamp_now}.csv"
         filepath = os.path.join(FLAG_PATH, filename)
+        
         try:
             with open(filepath, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow(['Review', 'Result', 'Timestamp', 'Sentiment', 'Confidence', 'Positive%', 'Neutral%', 'Negative%'])
-                writer.writerow([res.get('review', ''), res.get('full_result', ''), res.get('timestamp', datetime.now().strftime("%Y-%m-%d %H:%M:%S")), res.get('sentiment', 'Unknown'), f"{res.get('confidence', 0):.1f}%", f"{res.get('pos_prob', 0):.1f}%", f"{res.get('neu_prob', 0):.1f}%", f"{res.get('neg_prob', 0):.1f}%"])
+                writer.writerow([
+                    res.get('review', ''),
+                    res.get('full_result', ''),
+                    res.get('timestamp', datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+                    res.get('sentiment', 'Unknown'),
+                    f"{res.get('confidence', 0):.1f}%",
+                    f"{res.get('pos_prob', 0):.1f}%",
+                    f"{res.get('neu_prob', 0):.1f}%",
+                    f"{res.get('neg_prob', 0):.1f}%"
+                ])
             flagged_count += 1
             existing_reviews[key] = filename
         except Exception as e:
             print(f"Error flagging review: {e}")
+    
     if flagged_count == 0 and skipped_count > 0:
         return f"Flagged 0 reviews, {skipped_count} skipped (already exist)"
     elif flagged_count > 0 and skipped_count > 0:
@@ -893,50 +934,77 @@ def flag_all_from_table():
         return "No new reviews to flag (all already exist)"
 
 def flag_low_confidence(selected_labels):
-    if not selected_labels or not filtered_results_cache:
-        return "No results selected."
+    if not selected_labels:
+        return "No results selected. Check boxes below the table."
+    
+    if not filtered_results_cache:
+        return "No results to flag."
+    
     THRESHOLD = 70
     selected_results = []
+    
     for label in selected_labels:
         match = re.search(r'\[(\d+)\]', label)
         if match:
             idx = int(match.group(1)) - 1
             if 0 <= idx < len(filtered_results_cache):
                 selected_results.append(filtered_results_cache[idx])
+    
     if not selected_results:
         return "No valid results selected."
+    
     existing_reviews = get_existing_flagged_reviews()
     flagged_count = 0
     skipped_count = 0
     low_conf_count = 0
+    
     for res in selected_results:
         review_text = res.get('review', '').strip()
         timestamp = res.get('timestamp', 'Not specified')
         confidence = res.get('confidence', 0)
+        
         if not review_text:
             continue
+        
+        # Only flag if confidence is below threshold
         if confidence >= THRESHOLD:
             continue
+        
         low_conf_count += 1
+        
         date_only = 'No date'
         if timestamp and timestamp != 'Not specified':
             date_only = timestamp[:10] if len(timestamp) >= 10 else timestamp
+        
         key = (review_text, date_only)
+        
         if key in existing_reviews:
             skipped_count += 1
             continue
+        
         timestamp_now = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
         filename = f"flag_{timestamp_now}.csv"
         filepath = os.path.join(FLAG_PATH, filename)
+        
         try:
             with open(filepath, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow(['Review', 'Result', 'Timestamp', 'Sentiment', 'Confidence', 'Positive%', 'Neutral%', 'Negative%'])
-                writer.writerow([res.get('review', ''), res.get('full_result', ''), res.get('timestamp', datetime.now().strftime("%Y-%m-%d %H:%M:%S")), res.get('sentiment', 'Unknown'), f"{res.get('confidence', 0):.1f}%", f"{res.get('pos_prob', 0):.1f}%", f"{res.get('neu_prob', 0):.1f}%", f"{res.get('neg_prob', 0):.1f}%"])
+                writer.writerow([
+                    res.get('review', ''),
+                    res.get('full_result', ''),
+                    res.get('timestamp', datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+                    res.get('sentiment', 'Unknown'),
+                    f"{res.get('confidence', 0):.1f}%",
+                    f"{res.get('pos_prob', 0):.1f}%",
+                    f"{res.get('neu_prob', 0):.1f}%",
+                    f"{res.get('neg_prob', 0):.1f}%"
+                ])
             flagged_count += 1
             existing_reviews[key] = filename
         except Exception as e:
             print(f"Error flagging review: {e}")
+    
     if low_conf_count == 0:
         return f"No low confidence reviews in selection (threshold: {THRESHOLD}%)"
     elif flagged_count == 0 and skipped_count > 0:
