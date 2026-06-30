@@ -1072,6 +1072,244 @@ def generate_detailed_summary_stats(df, tab_name="Overview"):
     </div>
     """
 
+# ============ MISSING FUNCTIONS FOR EVENT HANDLERS ============
+
+def filter_analyzed_results(filter_value):
+    """Filter analyzed results by sentiment"""
+    global filtered_results_cache
+    
+    if filter_value == "All" or not filter_value:
+        filtered_results_cache = all_results.copy()
+    else:
+        filtered_results_cache = [r for r in all_results if r.get('sentiment', '') == filter_value]
+    
+    return get_analyzed_results_display()
+
+def filter_flagged_results(filter_value):
+    """Filter flagged results by sentiment"""
+    global filtered_flagged_cache
+    
+    # Get all flagged files
+    files = get_flagged_files()
+    if not files:
+        return "No flagged data yet.", []
+    
+    parsed_files = []
+    for file in files:
+        filepath = os.path.join(FLAG_PATH, file)
+        parsed = parse_flagged_file(filepath)
+        if parsed:
+            parsed_files.append(parsed)
+    
+    if filter_value != "All" and filter_value:
+        parsed_files = [p for p in parsed_files if p.get('sentiment', '') == filter_value]
+    
+    filtered_flagged_cache = parsed_files
+    
+    # Generate display
+    html = """
+    <style>
+        .flagged-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .flagged-table th { background: #D5C6E0; color: #000000 !important; padding: 10px; text-align: left; font-weight: 700; border: 1px solid #2A0800 !important; }
+        .flagged-table td { padding: 8px 10px; border: 1px solid #2A0800 !important; vertical-align: top; background: #ffffff; }
+        .flagged-table tr:hover td { background: #f5f0f7 !important; }
+        .flagged-container { max-height: 400px; overflow-y: auto; border: 2px solid #2A0800 !important; border-radius: 8px; background: #ffffff; }
+        .table-total { color: #ffffff !important; font-weight: 700; }
+        .sentiment-pos { color: #2ecc71 !important; font-weight: 700; }
+        .sentiment-neu { color: #f1c40f !important; font-weight: 700; }
+        .sentiment-neg { color: #e74c3c !important; font-weight: 700; }
+        .conf-high { color: #2ecc71 !important; font-weight: 700; }
+        .conf-low { color: #e74c3c !important; font-weight: 700; }
+        .review-preview { max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #000000 !important; }
+        .review-preview:hover { white-space: normal; overflow: visible; background: #ffffff; position: relative; z-index: 20; box-shadow: 0 2px 8px rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 4px; border: 1px solid #2A0800; }
+    </style>
+    <div class="flagged-container">
+        <table class="flagged-table">
+            <thead>
+                <tr>
+                    <th style="width:40px;">#</th>
+                    <th style="width:100px;">Sentiment</th>
+                    <th style="width:100px;">Confidence</th>
+                    <th style="width:80px;">Positive</th>
+                    <th style="width:80px;">Neutral</th>
+                    <th style="width:80px;">Negative</th>
+                    <th style="width:180px;">Date/Time</th>
+                    <th>Review</th>
+                </tr>
+            </thead>
+            <tbody>
+    """
+    for i, parsed in enumerate(parsed_files, 1):
+        sentiment = parsed.get('sentiment', 'Unknown')
+        emoji = get_sentiment_emoji(sentiment)
+        confidence = parsed.get('confidence', 0)
+        pos_prob = parsed.get('pos_prob', 0)
+        neu_prob = parsed.get('neu_prob', 0)
+        neg_prob = parsed.get('neg_prob', 0)
+        date_display = parsed.get('date', 'Unknown')
+        review = parsed.get('review_preview', '')
+        review_full = parsed.get('review_full', '')
+        sent_class = 'sentiment-pos' if sentiment == 'Positive' else 'sentiment-neu' if sentiment == 'Neutral' else 'sentiment-neg'
+        conf_class = 'conf-high' if confidence >= 70 else 'conf-low'
+        html += f"""
+            <tr>
+                <td style="color:#000000 !important; text-align:center;">{i}</td>
+                <td class="{sent_class}">{emoji} {sentiment}</td>
+                <td class="{conf_class}">{confidence:.1f}%</td>
+                <td style="color:#000000 !important;">{pos_prob:.1f}%</td>
+                <td style="color:#000000 !important;">{neu_prob:.1f}%</td>
+                <td style="color:#000000 !important;">{neg_prob:.1f}%</td>
+                <td style="color:#000000 !important;">{date_display}</td>
+                <td class="review-preview" title="{review_full}" style="color:#000000 !important;">{review}</td>
+            </tr>
+        """
+    html += """
+            </tbody>
+        </table>
+    </div>
+    """
+    html += f"<br><span class='table-total'>Total: {len(parsed_files)} flagged files</span>"
+    checkbox_choices = []
+    for i, parsed in enumerate(parsed_files, 1):
+        sentiment = parsed.get('sentiment', 'Unknown')
+        date_display = parsed.get('date', 'Unknown')
+        short_date = date_display[:10] if len(date_display) >= 10 else date_display
+        checkbox_choices.append(f"[{i}] {sentiment} - {short_date}")
+    
+    return html, checkbox_choices
+
+def select_all_analyzed():
+    """Select all analyzed results"""
+    display, choices = get_analyzed_results_display()
+    return gr.update(choices=choices, value=choices)
+
+def deselect_all_analyzed():
+    """Deselect all analyzed results"""
+    display, choices = get_analyzed_results_display()
+    return gr.update(choices=choices, value=[])
+
+def select_all_flagged():
+    """Select all flagged files"""
+    display, choices = get_flagged_display_table()
+    return gr.update(choices=choices, value=choices)
+
+def deselect_all_flagged():
+    """Deselect all flagged files"""
+    display, choices = get_flagged_display_table()
+    return gr.update(choices=choices, value=[])
+
+def delete_selected_from_table(selected_items):
+    """Delete selected analyzed results"""
+    global all_results, sentiment_data, sentiment_history, filtered_results_cache
+    
+    if not selected_items:
+        return "No items selected for deletion."
+    
+    # Parse indices from selected items
+    indices = []
+    for item in selected_items:
+        match = re.match(r'\[(\d+)\]', item)
+        if match:
+            idx = int(match.group(1)) - 1
+            indices.append(idx)
+    
+    if not indices:
+        return "No valid items selected."
+    
+    # Sort indices in reverse order to delete safely
+    indices.sort(reverse=True)
+    
+    # Delete from all_results and sentiment_data
+    for idx in indices:
+        if idx < len(all_results):
+            # Remove from all_results
+            deleted_review = all_results[idx].get('review', '')
+            del all_results[idx]
+            
+            # Remove from sentiment_data if exists
+            for i, data in enumerate(sentiment_data):
+                if data.get('review', '') == deleted_review:
+                    del sentiment_data[i]
+                    break
+    
+    # Update filtered cache
+    filtered_results_cache = all_results.copy()
+    
+    # Update sentiment_history
+    sentiment_history = []
+    for res in all_results:
+        timestamp = res.get('timestamp', 'Not specified')
+        sentiment = res.get('sentiment', 'Unknown')
+        confidence = res.get('confidence', 0)
+        sentiment_history.append(f"[{timestamp}] {sentiment} ({confidence:.1f}%)")
+    
+    return f"Deleted {len(indices)} selected items."
+
+def delete_all_analyzed():
+    """Delete all analyzed results"""
+    global all_results, sentiment_data, sentiment_history, filtered_results_cache
+    
+    count = len(all_results)
+    all_results.clear()
+    sentiment_data.clear()
+    sentiment_history.clear()
+    filtered_results_cache = []
+    
+    return f"Deleted all {count} items."
+
+def delete_flagged_results(selected_items):
+    """Delete selected flagged files"""
+    if not selected_items:
+        return "No items selected for deletion.", [], "No flagged data yet."
+    
+    # Parse indices from selected items
+    indices = []
+    for item in selected_items:
+        match = re.match(r'\[(\d+)\]', item)
+        if match:
+            idx = int(match.group(1)) - 1
+            indices.append(idx)
+    
+    if not indices:
+        return "No valid items selected.", [], "No flagged data yet."
+    
+    # Get all flagged files
+    files = get_flagged_files()
+    if not files:
+        return "No flagged files to delete.", [], "No flagged data yet."
+    
+    # Sort indices in reverse order
+    indices.sort(reverse=True)
+    
+    # Delete selected files
+    deleted_count = 0
+    for idx in indices:
+        if idx < len(files):
+            filepath = os.path.join(FLAG_PATH, files[idx])
+            if os.path.exists(filepath):
+                os.remove(filepath)
+                deleted_count += 1
+    
+    # Refresh display
+    display, choices = get_flagged_display_table()
+    
+    return f"Deleted {deleted_count} selected flagged files.", gr.update(choices=choices, value=[]), display
+
+def delete_all_flagged():
+    """Delete all flagged files"""
+    files = get_flagged_files()
+    count = len(files)
+    
+    for file in files:
+        filepath = os.path.join(FLAG_PATH, file)
+        if os.path.exists(filepath):
+            os.remove(filepath)
+    
+    # Refresh display
+    display, choices = get_flagged_display_table()
+    
+    return f"Deleted all {count} flagged files.", gr.update(choices=choices, value=[]), display
+
 # ============ ACTION FUNCTIONS ============
 def clear_history():
     global sentiment_data, all_results, all_reviews, sentiment_history, last_analysis_results, filtered_results_cache
