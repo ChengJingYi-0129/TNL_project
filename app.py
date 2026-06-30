@@ -691,7 +691,7 @@ def save_selected_results_from_table(selected_labels):
     if not selected_results:
         return "No valid results selected.", None
     
-    # Create CSV in memory
+    # Create CSV
     import io
     import csv
     output = io.StringIO()
@@ -712,10 +712,14 @@ def save_selected_results_from_table(selected_labels):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"exported_results_{timestamp}.csv"
     
-    return f"Downloaded {len(selected_results)} results!", gr.File(
+    # Create a file object
+    file_obj = gr.File(
         value=output.getvalue().encode('utf-8'),
-        filename=filename
+        filename=filename,
+        visible=True
     )
+    
+    return f"✅ Downloaded {len(selected_results)} results!", file_obj
 
 def save_all_results():
     if not all_results:
