@@ -11,40 +11,44 @@ pinned: false
 
 # Cinema Sentiment Analysis
 
-This project is a Malaysia-focused cinema sentiment analysis system for classifying Google Maps cinema reviews into positive, neutral, or negative sentiment.
+A Malaysia-focused NLP application that classifies Google Maps cinema reviews as **positive**, **neutral**, or **negative**, then presents results through an interactive Gradio interface.
 
-Online demo: https://huggingface.co/spaces/CJY0129/cinema-sentiment-analysis
+**Live demo:** https://huggingface.co/spaces/CJY0129/cinema-sentiment-analysis
 
-## Features
+## What It Does
 
-- Single review sentiment prediction
-- CSV batch import
-- Analysed result management
-- Flagged data management
-- Sentiment summary and visualization charts
+- Analyses one review at a time for quick feedback
+- Imports CSV files for batch analysis
+- Visualises sentiment distributions and summaries
+- Supports review-result and flagged-data management
+- Uses a trained BiGRU sentiment model for predictions
+
+## Tech Stack
+
+- Python
+- Gradio
+- TensorFlow / Keras
+- Pandas and scikit-learn
+- Hugging Face Spaces
 
 ## Run Locally
 
-Install dependencies:
-
 ```bash
 pip install -r requirements.txt
-```
-
-Run the Gradio application:
-
-```bash
 python app.py
 ```
 
 ## Dataset
 
-The dataset contains selected Google Maps reviews from GSC cinema branches in Kuala Lumpur and Melaka.
+The project uses selected Google Maps reviews of GSC cinema branches in Kuala Lumpur and Melaka for academic analysis. Handle source data responsibly and do not add personally identifiable information to the repository.
 
-## Project Folder
+## Repository Layout
 
-The organized submission package is available in:
+- `app.py` — Gradio application
+- `best_sentiment_bigru/` — trained model artefact
+- `data/` — local project data
+- `notebook/` — experimentation and analysis notebooks
 
-```text
-TNL6323_Submission_Package/
-```
+## Project Context
+
+Built as an academic NLP project to turn unstructured customer feedback into an accessible sentiment-analysis workflow.
